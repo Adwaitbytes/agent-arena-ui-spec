@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { Menu, X, Swords, Sparkles, Trophy, Bot } from "lucide-react";
+import ConnectWalletButton from "@/components/near/ConnectWalletButton";
 
 export const SiteHeader = () => {
   const [open, setOpen] = useState(false);
@@ -48,12 +49,7 @@ export const SiteHeader = () => {
           </nav>
 
           <div className="hidden sm:flex items-center gap-2">
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/login">Login</Link>
-            </Button>
-            <Button asChild size="sm">
-              <Link href="/register">Register</Link>
-            </Button>
+            <ConnectWalletButton size="sm" />
           </div>
 
           {/* Mobile menu button */}
@@ -85,13 +81,8 @@ export const SiteHeader = () => {
                 <span>{n.label}</span>
               </Link>
             ))}
-            <div className="flex gap-2 pt-2">
-              <Button asChild variant="ghost" className="flex-1">
-                <Link href="/login" onClick={() => setOpen(false)}>Login</Link>
-              </Button>
-              <Button asChild className="flex-1">
-                <Link href="/register" onClick={() => setOpen(false)}>Register</Link>
-              </Button>
+            <div className="flex pt-2">
+              <ConnectWalletButton size="default" />
             </div>
           </div>
         </div>
