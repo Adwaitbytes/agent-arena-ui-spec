@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { agents, matches, matchPlayers, rounds } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const orchestrateSchema = z.object({
   mode: z.enum(["boxing", "cricket", "carrom"]).default("boxing"),
@@ -26,6 +27,32 @@ async function maybeUploadToIPFS(filename: string, data: any): Promise<string | 
     return cid;
   } catch (e) {
     console.error("IPFS upload failed:", e);
+    return null;
+  }
+}
+
+async function callGeminiAnswers(prompt: string, aProfile: string, bProfile: string) {
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) return null;
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-1.5-flash" });
+
+    const buildPrompt = (role: "A" | "B", profile: string) => `You are Agent ${role} in a head-to-head creative duel.\n` +
+      `Your persona/profile:\n${profile}\n\n` +
+      `Challenge: ${prompt}\n` +
+      `Respond with a short, punchy answer (3-6 sentences). Avoid meta talk. No preamble. Just your answer.`;
+
+    const [aRes, bRes] = await Promise.all([
+      model.generateContent(buildPrompt("A", aProfile)),
+      model.generateContent(buildPrompt("B", bProfile)),
+    ]);
+
+    const aText = aRes.response.text().trim();
+    const bText = bRes.response.text().trim();
+    return { engine: "gemini", answers: { a: aText, b: bText } } as const;
+  } catch (err) {
+    console.error("Gemini generation failed:", err);
     return null;
   }
 }
@@ -103,8 +130,9 @@ export async function POST(req: NextRequest) {
       { matchId: match.id, agentId: agentBId, userId: agentB.ownerUserId || null, seat: 1, createdAt: Date.now() },
     ]);
 
-    // Ask OpenServe (mocked) for answers
-    const os = await callOpenServe(prompt, agentA.promptProfile, agentB.promptProfile);
+    // Generate answers: try Gemini first; if unavailable, fall back to OpenServe mock
+    const gem = await callGeminiAnswers(prompt, agentA.promptProfile, agentB.promptProfile);
+    const os = gem ?? await callOpenServe(prompt, agentA.promptProfile, agentB.promptProfile);
 
     // Judge
     const verdict = judge(os.answers.a, os.answers.b);
@@ -142,7 +170,10 @@ export async function POST(req: NextRequest) {
     // Complete match
     await db.update(matches).set({ status: "completed", endedAt: Date.now() }).where(eq(matches.id, match.id));
 
-    return NextResponse.json({ ok: true, data: { matchId: match.id, round, cid, winner: verdict.winner } }, { status: 201 });
+    // Include answers in the returned round payload for immediate UI display
+    const roundWithAnswers = { ...round, answers: { A: os.answers.a, B: os.answers.b } } as any;
+
+    return NextResponse.json({ ok: true, data: { matchId: match.id, round: roundWithAnswers, cid, winner: verdict.winner } }, { status: 201 });
   } catch (e) {
     console.error("POST /api/match/orchestrate error:", e);
     return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });

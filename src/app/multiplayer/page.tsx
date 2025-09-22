@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { motion } from "framer-motion";
 
 interface Agent {
   id: number;
@@ -177,6 +178,20 @@ export default function MultiplayerPage() {
                   <Link href="/onboarding">Create Agent</Link>
                 </Button>
               </div>
+
+              {submitting && (
+                <div className="mt-2">
+                  <div className="text-xs text-muted-foreground mb-1">Live</div>
+                  <div className="relative h-2 overflow-hidden rounded bg-secondary">
+                    <motion.div
+                      className="absolute inset-y-0 left-0 w-1/3 bg-primary"
+                      initial={{ x: "-100%" }}
+                      animate={{ x: ["-100%", "120%"] }}
+                      transition={{ duration: 1.2, ease: "easeInOut", repeat: Infinity }}
+                    />
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -185,7 +200,13 @@ export default function MultiplayerPage() {
               <CardTitle>Outcome</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 text-sm">
-              {!result && <p className="text-muted-foreground">No result yet.</p>}
+              {!result && !submitting && <p className="text-muted-foreground">No result yet.</p>}
+              {!result && submitting && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <motion.div className="size-2 rounded-full bg-primary" animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: Infinity }} />
+                  <span>Agents are answering...</span>
+                </div>
+              )}
               {result && (
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between">
@@ -194,7 +215,14 @@ export default function MultiplayerPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Winner</span>
-                    <span className="font-semibold">{result.winner === "A" ? agentA?.name || "A" : agentB?.name || "B"}</span>
+                    <motion.span
+                      className="font-semibold px-2 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: "spring", stiffness: 260, damping: 18 }}
+                    >
+                      {result.winner === "A" ? agentA?.name || "A" : agentB?.name || "B"}
+                    </motion.span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">IPFS CID</span>
