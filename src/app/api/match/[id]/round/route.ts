@@ -3,6 +3,7 @@ import { db } from '@/db';
 import { matches, rounds } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
+import { isPinataConfigured, pinJSON } from '@/lib/pinata';
 
 const createRoundSchema = z.object({
   idx: z.number().int().min(0),
@@ -45,13 +46,33 @@ export async function POST(
       );
     }
 
-    const { idx, question, ipfsCid, judgeScores, resultSummary } = validation.data;
+    const { idx, question, ipfsCid, judgeScores, resultSummary, answers } = validation.data as any;
+
+    // Optionally pin round payload to IPFS via Pinata when configured and no CID provided
+    let ipfsCidToUse: string | null = ipfsCid || null;
+    if (!ipfsCidToUse && isPinataConfigured()) {
+      try {
+        const payload = {
+          matchId,
+          round: idx,
+          mode: match.mode,
+          question,
+          answers: answers ?? null,
+          judge: judgeScores ? { scores: judgeScores, rationale: null, flags: null } : null,
+          timestamps: { createdAt: Date.now() },
+        };
+        const res = await pinJSON(payload, { name: `match-${matchId}-round-${idx}` });
+        ipfsCidToUse = res.IpfsHash;
+      } catch (e) {
+        console.error('Pinata pin failed, continuing without CID:', e);
+      }
+    }
 
     const [newRound] = await db.insert(rounds).values({
       matchId,
       idx,
       question,
-      ipfsCid: ipfsCid || null,
+      ipfsCid: ipfsCidToUse,
       judgeScores: judgeScores || null,
       resultSummary: resultSummary || null,
       createdAt: Date.now(),

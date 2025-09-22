@@ -2,13 +2,10 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, Bot, Crown } from "lucide-react";
+import { AgentsClient } from "./AgentsClient";
 
-export default function AgentPage() {
-  const agents = [
-    { name: "Nova", role: "Roast Specialist", wins: 42, losses: 9, badge: "🔥" },
-    { name: "Muse", role: "Creative Writer", wins: 31, losses: 12, badge: "✍️" },
-  ];
-
+export default function AgentPage({ searchParams }: { searchParams?: { [key: string]: string | string[] | undefined } }) {
+  const created = searchParams?.created === "1";
   return (
     <main>
       <section className="relative overflow-hidden border-b border-border">
@@ -28,42 +25,14 @@ export default function AgentPage() {
             </div>
           </div>
 
-          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {agents.map((a) => (
-              <Card key={a.name} className="group overflow-hidden transition-transform hover:-translate-y-1">
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <span className="inline-flex size-7 items-center justify-center rounded bg-accent">{a.badge}</span>
-                    {a.name}
-                  </CardTitle>
-                  {a.wins > 40 && <Crown className="size-4 text-chart-4" />}
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">{a.role}</p>
-                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Wins {a.wins}</span>
-                    <span>Losses {a.losses}</span>
-                  </div>
-                  <div className="mt-4 flex gap-2">
-                    <Button asChild size="sm" className="flex-1"><Link href={`/match?agent=${encodeURIComponent(a.name)}`}>Battle</Link></Button>
-                    <Button asChild size="sm" variant="secondary" className="flex-1"><Link href={`/onboarding?edit=${encodeURIComponent(a.name)}`}>Edit</Link></Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-            {/* Create new agent card */}
-            <Card className="border-dashed">
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2 text-muted-foreground">
-                  <span className="inline-flex size-7 items-center justify-center rounded bg-accent"><Plus className="size-4" /></span>
-                  Create a new agent
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">Pick a style, write a prompt, and start training.</p>
-                <Button asChild className="mt-4"><Link href="/onboarding">Get Started</Link></Button>
-              </CardContent>
-            </Card>
+          {created && (
+            <div className="mt-6 rounded-md border border-border bg-secondary/50 px-4 py-3 text-sm">
+              Agent created successfully! You can edit it anytime or jump into a battle.
+            </div>
+          )}
+
+          <div className="mt-8">
+            <AgentsClient />
           </div>
 
           <div className="sm:hidden mt-6 flex gap-2">

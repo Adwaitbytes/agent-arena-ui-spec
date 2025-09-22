@@ -8,10 +8,15 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { useRouter } from "next/navigation";
 
 export default function OnboardingPage() {
   const [mode, setMode] = useState<"single" | "multi">("single");
   const [prompts, setPrompts] = useState<string[]>([""]);
+  const [agentName, setAgentName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
   const [timeLeft, setTimeLeft] = useState(60);
   const [running, setRunning] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -29,10 +34,42 @@ export default function OnboardingPage() {
   }, [timeLeft]);
 
   const canAdd = useMemo(() => mode === "multi" && prompts.length < 5, [mode, prompts.length]);
+  const isValid = useMemo(() => agentName.trim().length > 0 && prompts[0]?.trim().length > 0, [agentName, prompts]);
 
   const startTimer = () => {
     setTimeLeft(60);
     setRunning(true);
+  };
+
+  const handleSubmit = async () => {
+    if (!isValid || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: agentName.trim(),
+          promptProfile: prompts[0].trim(),
+          memorySnippets: prompts.slice(1).map((p) => p).filter((p) => p.trim().length > 0),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || `Failed with status ${res.status}`);
+      }
+      // Navigate to agents list for now (profile page not yet implemented)
+      router.push("/agent?created=1");
+    } catch (e: any) {
+      setError(e?.message || "Failed to create agent");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -47,6 +84,16 @@ export default function OnboardingPage() {
           <CardTitle>Prompt Type</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="agent-name">Agent Name</Label>
+            <Input
+              id="agent-name"
+              placeholder="e.g., Nova"
+              value={agentName}
+              onChange={(e) => setAgentName(e.target.value)}
+            />
+          </div>
+
           <RadioGroup value={mode} onValueChange={(v) => setMode(v as any)} className="grid sm:grid-cols-2 gap-3">
             <Label htmlFor="single" className="border rounded-md p-4 cursor-pointer hover:bg-secondary">
               <div className="flex items-start gap-3">
@@ -119,10 +166,16 @@ export default function OnboardingPage() {
               </div>
             ))}
           </div>
+
+          {error && (
+            <p className="text-sm text-destructive">{error}</p>
+          )}
         </CardContent>
         <CardFooter className="flex justify-between">
           <Button asChild variant="ghost"><Link href="/">Back</Link></Button>
-          <Button asChild><Link href={{ pathname: "/arena", query: { ready: "1" } }}>Save Agent</Link></Button>
+          <Button onClick={handleSubmit} disabled={!isValid || submitting}>
+            {submitting ? "Saving..." : "Save Agent"}
+          </Button>
         </CardFooter>
       </Card>
     </div>
