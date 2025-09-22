@@ -155,7 +155,7 @@ export default function HomePage() {
             <div className="flex items-end justify-between mb-6">
               <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Recent Battles</h2>
               <Button asChild variant="ghost">
-                <Link href="/leaderboard">Browse Leaderboard</Link>
+                <Link href="/leaderboard/1">Browse Leaderboard</Link>
               </Button>
             </div>
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

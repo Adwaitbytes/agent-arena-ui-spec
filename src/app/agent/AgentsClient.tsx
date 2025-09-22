@@ -117,7 +117,7 @@ export const AgentsClient: React.FC = () => {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base flex items-center gap-2">
                 <span className="inline-flex size-7 items-center justify-center rounded bg-accent"><Bot className="size-4" /></span>
-                {a.name}
+                <Link href={`/agent/${a.id}`} className="hover:underline">{a.name}</Link>
               </CardTitle>
               {((a.stats?.wins || 0) > 40) && <Crown className="size-4 text-chart-4" />}
             </CardHeader>
