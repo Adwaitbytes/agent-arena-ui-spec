@@ -1,7 +1,7 @@
 "use client";
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { setupWalletSelector, WalletSelector, AccountState } from "@near-wallet-selector/core";
-import { setupNearWallet } from "@near-wallet-selector/near-wallet";
+import { setupMyNearWallet } from "@near-wallet-selector/my-near-wallet";
 import { setupModal, WalletSelectorModal } from "@near-wallet-selector/modal-ui";
 import "@near-wallet-selector/modal-ui/styles.css";
 
@@ -25,7 +25,8 @@ export const NearWalletProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const unsubRef = useRef<() => void>();
 
   const network = process.env.NEXT_PUBLIC_NEAR_NETWORK || "testnet";
-  const contractId = process.env.NEXT_PUBLIC_NEAR_CONTRACT_ID; // optional for login-only flows
+  // Prefer explicit env, otherwise use a known public example contract on testnet to enable sign-in flows
+  const contractId = process.env.NEXT_PUBLIC_NEAR_CONTRACT_ID || (network === "testnet" ? "guest-book.testnet" : undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +34,11 @@ export const NearWalletProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       try {
         const _selector = await setupWalletSelector({
           network: network as any,
-          modules: [setupNearWallet()],
+          modules: [
+            setupMyNearWallet({
+              walletUrl: network === "mainnet" ? "https://app.mynearwallet.com" : "https://testnet.mynearwallet.com",
+            }),
+          ],
         });
         if (cancelled) return;
         setSelector(_selector);
@@ -78,6 +83,7 @@ export const NearWalletProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!selector) return;
     const wallet = await selector.wallet();
     await wallet.signOut();
+    setAccountId(null);
     refreshAccounts();
   };
 
