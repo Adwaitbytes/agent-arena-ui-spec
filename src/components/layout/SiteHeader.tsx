@@ -13,6 +13,7 @@ export const SiteHeader = () => {
     { href: "/arena", label: "Arenas" },
     { href: "/onboarding", label: "Create Agent" },
     { href: "/match", label: "Quick Match" },
+    { href: "/multiplayer", label: "Multiplayer" },
     { href: "/leaderboard", label: "Leaderboard" },
     { href: "/agent", label: "My Agents" },
   ];
