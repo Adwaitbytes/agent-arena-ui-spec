@@ -2,7 +2,6 @@
 import Link from "next/link";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useSession } from 'next-auth/react'; // If auth exists; else wallet
 import { connectWallet } from '@/lib/near-wallet';
 import { useState } from 'react';
 
@@ -31,7 +30,6 @@ const ARENAS = [
 ];
 
 export default function ArenaPage() {
-  const { data: session } = useSession(); // Fallback to wallet
   const [nearAccount, setNearAccount] = useState(null);
 
   const handleConnect = async () => {
@@ -39,7 +37,7 @@ export default function ArenaPage() {
     setNearAccount(account);
   };
 
-  if (!session && !nearAccount) {
+  if (!nearAccount) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <h1>Connect Wallet to Battle</h1>

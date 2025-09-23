@@ -1,10 +1,10 @@
 import { setupWalletSelector } from '@near-wallet-selector/core';
 import { setupNearWallet } from '@near-wallet-selector/near-wallet';
-import { setupGoogleWallet } from '@near-wallet-selector/google';
+// import { setupGoogleWallet } from '@near-wallet-selector/google'; // Removed due to package not found; add back if needed with correct package
 
 const WALLET_CONFIG = [
   setupNearWallet(),
-  setupGoogleWallet(),
+  // setupGoogleWallet(),
 ];
 
 export const walletSelector = setupWalletSelector({
