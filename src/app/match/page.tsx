@@ -24,6 +24,12 @@ export default function MatchPage() {
   const [intentLoading, setIntentLoading] = useState(false);
   const [intentError, setIntentError] = useState<string | null>(null);
   const [intentUrl, setIntentUrl] = useState<string | null>(null);
+  // NEAR confirm intent state
+  const [confirmTx, setConfirmTx] = useState("");
+  const [confirmProof, setConfirmProof] = useState("");
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
 
   const prompt = useMemo(() => {
     switch (mode) {
@@ -210,6 +216,49 @@ export default function MatchPage() {
     navigator?.clipboard?.writeText(cid).catch(() => {});
   };
 
+  const confirmIntent = useCallback(async () => {
+    setConfirmLoading(true);
+    setConfirmError(null);
+    setConfirmMsg(null);
+    try {
+      if (!confirmTx.trim()) {
+        setConfirmError("Enter the intents transaction/receipt ID");
+        return;
+      }
+      // Ensure there is a match id
+      let id = matchId;
+      if (!id) {
+        id = await startMatch();
+        if (!id) return;
+        setMatchId(id);
+      }
+      const res = await fetch("/api/near/intent/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matchId: id,
+          intentsTx: confirmTx.trim(),
+          vrfProof: confirmProof.trim() || undefined,
+          // evidence can be attached later (roundsCid/summaryCid)
+        }),
+      });
+      const json = await res.json();
+      if (res.status === 501) {
+        setConfirmError("NEAR Intents not configured. Set NEAR_NETWORK and NEAR_INTENTS_BASE_URL on server.");
+        return;
+      }
+      if (!res.ok || !json?.ok) throw new Error(json?.error || `Failed ${res.status}`);
+      setConfirmMsg(`Intent confirmed for match #${id}. Tx: ${confirmTx.trim()}`);
+      // Optionally clear inputs
+      // setConfirmTx("");
+      // setConfirmProof("");
+    } catch (e: any) {
+      setConfirmError(e?.message || "Failed to confirm intent");
+    } finally {
+      setConfirmLoading(false);
+    }
+  }, [confirmTx, confirmProof, matchId, startMatch]);
+
   const progress = (evaluations.length / ROUNDS) * 100;
 
   return (
@@ -338,9 +387,27 @@ export default function MatchPage() {
           ) : (
             <p className="text-muted-foreground">Create a claim intent to proceed with payout (demo).</p>
           )}
+          {/* Confirm intent UI */}
+          {confirmError && <div className="rounded-md border border-border bg-secondary/50 px-3 py-2 text-destructive">{confirmError}</div>}
+          {confirmMsg && <div className="rounded-md border border-border bg-secondary/50 px-3 py-2">{confirmMsg}</div>}
+          <div className="grid gap-2">
+            <input
+              className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+              placeholder="Intents transaction / receipt ID"
+              value={confirmTx}
+              onChange={(e) => setConfirmTx(e.target.value)}
+            />
+            <input
+              className="h-9 rounded-md border border-border bg-background px-3 text-sm"
+              placeholder="VRF proof (optional)"
+              value={confirmProof}
+              onChange={(e) => setConfirmProof(e.target.value)}
+            />
+          </div>
         </CardContent>
-        <CardFooter>
+        <CardFooter className="flex gap-2">
           <Button onClick={createClaimIntent} disabled={intentLoading}>{intentLoading ? "Creating..." : "Create Claim Intent"}</Button>
+          <Button variant="secondary" onClick={confirmIntent} disabled={confirmLoading}>{confirmLoading ? "Confirming..." : "Confirm Intent"}</Button>
         </CardFooter>
       </Card>
     </div>
