@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { matches } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { matches, matchPlayers, rounds, agents } from '@/db/schema';
+import { and, eq, sum, inArray } from 'drizzle-orm';
 import { z } from 'zod';
+import { getGolemClient, createMatchEntity } from '@/lib/golem-client';
 
 const finishMatchSchema = z.object({
   summary: z.string().optional(),
@@ -42,29 +43,147 @@ export async function POST(
       );
     }
 
-    if (match.status === 'finished') {
+    if (match.status === 'finished' || match.status === 'completed') {
       return NextResponse.json(
         { ok: false, error: 'Match already finished' },
         { status: 400 }
       );
     }
 
-    const { vrfProof, intentsTx } = validation.data;
+    const { vrfProof, intentsTx, summary } = validation.data;
 
+    // Get all rounds for this match to compute total scores
+    const matchRounds = await db
+      .select()
+      .from(rounds)
+      .where(eq(rounds.matchId, matchId));
+
+    // Compute total scores from rounds judgeScores JSON
+    let totalScoreA = 0;
+    let totalScoreB = 0;
+
+    matchRounds.forEach(round => {
+      if (round.judgeScores) {
+        const scores = round.judgeScores as any;
+        if (scores.scoreA !== undefined) totalScoreA += scores.scoreA;
+        if (scores.scoreB !== undefined) totalScoreB += scores.scoreB;
+        if (scores.aScore !== undefined) totalScoreA += scores.aScore;
+        if (scores.bScore !== undefined) totalScoreB += scores.bScore;
+      }
+    });
+
+    // Determine winner based on scores
+    let winner: string;
+    if (totalScoreA > totalScoreB) {
+      winner = 'a';
+    } else if (totalScoreB > totalScoreA) {
+      winner = 'b';
+    } else {
+      winner = 'tie';
+    }
+
+    // Get match players to determine agentAId and agentBId
+    const players = await db
+      .select()
+      .from(matchPlayers)
+      .where(eq(matchPlayers.matchId, matchId));
+
+    let agentAId = null;
+    let agentBId = null;
+
+    if (players.length >= 2) {
+      // Sort by seat to ensure consistent A/B assignment
+      players.sort((a, b) => a.seat - b.seat);
+      agentAId = players[0].agentId;
+      agentBId = players[1].agentId;
+    }
+
+    // Update match with computed results
     const [updatedMatch] = await db
       .update(matches)
       .set({
-        status: 'finished',
+        status: 'completed',
         endedAt: Date.now(),
-        vrfProof: vrfProof || match.vrfProof,
-        intentsTx: intentsTx || match.intentsTx,
+        winner,
+        scoreA: totalScoreA,
+        scoreB: totalScoreB,
+        agentAId,
+        agentBId,
+        summary: summary || null,
+        vrfProof: vrfProof || null,
+        intentsTx: intentsTx || null,
       })
       .where(eq(matches.id, matchId))
       .returning();
 
+    // Create player links if missing (for backwards compatibility)
+    if (players.length === 0 && agentAId && agentBId) {
+      await db.insert(matchPlayers).values([
+        {
+          matchId,
+          agentId: agentAId,
+          userId: null,
+          seat: 0,
+          createdAt: Date.now(),
+        },
+        {
+          matchId,
+          agentId: agentBId,
+          userId: null,
+          seat: 1,
+          createdAt: Date.now(),
+        },
+      ]);
+    }
+
+    // Get agent details for Golem integration
+    const agentDetails = await db
+      .select()
+      .from(agents)
+      .where(inArray(agents.id, [agentAId, agentBId].filter(Boolean) as number[]));
+
+    const agentA = agentDetails.find(a => a.id === agentAId);
+    const agentB = agentDetails.find(a => a.id === agentBId);
+
+    // Integrate with existing Golem storage
+    try {
+      const golemData = {
+        id: updatedMatch.id,
+        mode: updatedMatch.mode,
+        agents: [
+          { id: agentAId, name: agentA?.name || 'Agent A' },
+          { id: agentBId, name: agentB?.name || 'Agent B' }
+        ],
+        winner: winner === 'tie' ? -1 : (winner === 'a' ? 0 : 1),
+        scores: { a: totalScoreA, b: totalScoreB },
+        summary: summary || 'Match completed',
+        createdAt: updatedMatch.createdAt,
+        endedAt: updatedMatch.endedAt,
+      };
+      
+      const golemResult = await createMatchEntity(golemData);
+      console.log('Golem entity created:', golemResult);
+      
+      // Update local with Golem tx if successful (optional field extension)
+      if (golemResult?.txHash) {
+        await db
+          .update(matches)
+          .set({ intentsTx: golemResult.txHash })
+          .where(eq(matches.id, matchId));
+      }
+    } catch (golemError) {
+      console.error('Golem integration failed (non-fatal):', golemError);
+      // Continue; local save succeeds even if Golem fails
+    }
+
     return NextResponse.json({
       ok: true,
-      data: updatedMatch,
+      data: {
+        match: updatedMatch,
+        scores: { scoreA: totalScoreA, scoreB: totalScoreB },
+        winner,
+        agents: { a: agentA, b: agentB },
+      },
     });
   } catch (error) {
     console.error('POST /api/match/[id]/finish error:', error);

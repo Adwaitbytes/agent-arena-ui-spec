@@ -19,6 +19,12 @@ export const matches = sqliteTable('matches', {
   vrfProof: text('vrf_proof'),
   intentsTx: text('intents_tx'),
   shadeAgentId: text('shade_agent_id', { length: 128 }),
+  winner: text('winner'),
+  scoreA: integer('score_a'),
+  scoreB: integer('score_b'),
+  agentAId: integer('agent_a_id').references(() => agents.id),
+  agentBId: integer('agent_b_id').references(() => agents.id),
+  summary: text('summary'),
   createdAt: integer('created_at').notNull(),
 });
 

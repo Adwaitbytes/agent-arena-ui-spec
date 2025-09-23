@@ -10,7 +10,7 @@ const createRoundSchema = z.object({
   question: z.string().min(1).transform(s => s.trim()),
   answers: z.any().optional(),
   ipfsCid: z.string().max(128).optional(),
-  judgeScores: z.object({}).optional(),
+  judgeScores: z.any().optional(),
   resultSummary: z.string().optional(),
   answerA: z.string().optional(),
   answerB: z.string().optional(),
