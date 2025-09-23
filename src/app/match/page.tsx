@@ -30,6 +30,9 @@ export default function MatchPage() {
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
+  // 30s quick match timer
+  const [secondsLeft, setSecondsLeft] = useState<number>(30);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
 
   const prompt = useMemo(() => {
     switch (mode) {
@@ -69,6 +72,25 @@ export default function MatchPage() {
     };
     loadAgents();
   }, [selectedAgentId]);
+
+  // Start/maintain 30s countdown when match is active
+  useEffect(() => {
+    if (!matchId || finished) return;
+    setSecondsLeft((s) => (s <= 0 ? 30 : s)); // reset if needed when a new match starts
+    const iv = setInterval(() => {
+      setSecondsLeft((prev) => {
+        const next = prev - 1;
+        if (next <= 0) {
+          clearInterval(iv);
+          // Auto-finish once when timer hits 0
+          if (!finished) finishMatch();
+          return 0;
+        }
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [matchId, finished, finishMatch]);
 
   const startMatch = useCallback(async () => {
     if (!selectedAgentId) {
@@ -261,11 +283,27 @@ export default function MatchPage() {
 
   const progress = (evaluations.length / ROUNDS) * 100;
 
+  const handleShare = useCallback(() => {
+    if (!matchId) return;
+    const url = `${window.location.origin}/match/${matchId}`;
+    navigator?.clipboard?.writeText(url).then(() => setShareMsg("Link copied!"));
+    setTimeout(() => setShareMsg(null), 2000);
+  }, [matchId]);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight capitalize">{mode} match</h1>
-        <div className="text-sm text-muted-foreground">Round {Math.min(round, ROUNDS)} / {ROUNDS}</div>
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <div>Round {Math.min(round, ROUNDS)} / {ROUNDS}</div>
+          {/* Quick match timer */}
+          {matchId && !finished && (
+            <div className="inline-flex items-center gap-1 rounded-md border px-2 py-1 bg-secondary/60">
+              <span className="hidden sm:inline">⏱️</span>
+              <span>{String(Math.floor(secondsLeft / 60)).padStart(2, '0')}:{String(secondsLeft % 60).padStart(2, '0')}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Agent selector + start */}
@@ -368,6 +406,16 @@ export default function MatchPage() {
           <Button onClick={judgeNow} disabled={loading || evaluations.length >= round || finished}> {loading ? "Judging..." : "Judge Round"} </Button>
           <Button variant="secondary" onClick={nextRound} disabled={round >= ROUNDS || finished}>Next Round</Button>
           <Button variant="ghost" onClick={finishMatch} disabled={evaluations.length < ROUNDS || finishing || finished}>{finishing ? "Finishing..." : finished ? "Finished" : "Finish & View Result"}</Button>
+          {/* Share / Replay CTAs */}
+          {finished && matchId && (
+            <>
+              <Button variant="secondary" onClick={handleShare}>Share</Button>
+              <Button asChild>
+                <a href={`/match/${matchId}`}>View Replay</a>
+              </Button>
+              {shareMsg && <span className="text-xs text-muted-foreground">{shareMsg}</span>}
+            </>
+          )}
         </CardFooter>
       </Card>
 
