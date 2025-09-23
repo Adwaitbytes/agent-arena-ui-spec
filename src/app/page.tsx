@@ -9,6 +9,8 @@ import { ws } from "@/lib/realtime";
 
 export default function HomePage() {
   const [live, setLive] = useState<string[]>([]);
+  const [streak, setStreak] = useState<number>(0);
+  const [copied, setCopied] = useState<boolean>(false);
 
   useEffect(() => {
     const unsub = ws.sub("ticker", (msg: any) => {
@@ -23,6 +25,49 @@ export default function HomePage() {
     });
     return () => unsub();
   }, []);
+
+  // Daily streak: increments on consecutive-day visits
+  useEffect(() => {
+    try {
+      const last = localStorage.getItem("aba_last_visit");
+      const prevStreak = Number(localStorage.getItem("aba_streak") || 0);
+      const now = new Date();
+      const todayKey = now.toISOString().slice(0, 10);
+      if (!last) {
+        localStorage.setItem("aba_last_visit", todayKey);
+        localStorage.setItem("aba_streak", "1");
+        setStreak(1);
+        return;
+      }
+      if (last === todayKey) {
+        setStreak(prevStreak || 1);
+        return;
+      }
+      const diffDays = Math.floor(
+        (new Date(todayKey).getTime() - new Date(last).getTime()) / (1000 * 60 * 60 * 24)
+      );
+      const nextStreak = diffDays === 1 ? Math.max(1, prevStreak + 1) : 1;
+      localStorage.setItem("aba_last_visit", todayKey);
+      localStorage.setItem("aba_streak", String(nextStreak));
+      setStreak(nextStreak);
+    } catch {}
+  }, []);
+
+  const handleShareX = () => {
+    const url = typeof window !== "undefined" ? window.location.origin : "";
+    const text = encodeURIComponent("Battle me in Agent Battle Arena — 30s AI duels ⚔️");
+    const shareUrl = `https://twitter.com/intent/tweet?text=${text}&url=${encodeURIComponent(url)}`;
+    window.open(shareUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const handleCopyInvite = async () => {
+    try {
+      const url = typeof window !== "undefined" ? window.location.origin : "";
+      await navigator.clipboard.writeText(`${url}/arena`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
 
   const fallback = [
     "Nova beat ByteBrawler 2-1",
@@ -80,6 +125,9 @@ export default function HomePage() {
                   <img alt="avatar3" className="size-8 rounded-full border border-border" src="https://images.unsplash.com/photo-1502685104226-ee32379fefbe?q=80&w=80&auto=format&fit=crop" />
                 </div>
                 <span>10k+ battles played</span>
+                <span className="ml-2 inline-flex items-center gap-1 rounded-full border border-border px-2 py-1 text-xs">
+                  🔥 Streak: <strong className="font-semibold">{streak}</strong>
+                </span>
               </div>
             </div>
             <div className="relative">
@@ -114,6 +162,26 @@ export default function HomePage() {
                   </span>
                 ))}
               </motion.div>
+            </div>
+          </div>
+        </section>
+
+        {/* Social share & invite */}
+        <section className="py-6 border-b border-border bg-secondary/30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Brag and invite friends: quick duels under 60s. Beat their bots and climb the board.
+            </p>
+            <div className="flex gap-2">
+              <Button size="sm" variant="secondary" onClick={handleShareX}>
+                Share to X/Twitter
+              </Button>
+              <Button size="sm" onClick={handleCopyInvite}>
+                {copied ? "Copied!" : "Copy Invite Link"}
+              </Button>
+              <Button size="sm" variant="ghost" asChild>
+                <Link href="/leaderboard/1">View Leaderboard</Link>
+              </Button>
             </div>
           </div>
         </section>
