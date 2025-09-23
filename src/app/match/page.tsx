@@ -52,46 +52,6 @@ export default function MatchPage() {
     return "boxing"; // roast -> boxing
   }, [mode]);
 
-  // Load agents for selection
-  useEffect(() => {
-    const loadAgents = async () => {
-      try {
-        setError(null);
-        const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
-        const res = await fetch(`/api/agents?page=1&pageSize=20`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
-        const json = await res.json();
-        if (!res.ok || !json?.ok) throw new Error(json?.error || `Failed ${res.status}`);
-        const list: Array<{ id: number; name: string }> = (json.data?.agents || []).map((a: any) => ({ id: a.id, name: a.name }));
-        setAgents(list);
-        if (list.length && !selectedAgentId) setSelectedAgentId(list[0].id);
-      } catch (e: any) {
-        setError(e?.message || "Failed to load agents");
-      }
-    };
-    loadAgents();
-  }, [selectedAgentId]);
-
-  // Start/maintain 30s countdown when match is active
-  useEffect(() => {
-    if (!matchId || finished) return;
-    setSecondsLeft((s) => (s <= 0 ? 30 : s)); // reset if needed when a new match starts
-    const iv = setInterval(() => {
-      setSecondsLeft((prev) => {
-        const next = prev - 1;
-        if (next <= 0) {
-          clearInterval(iv);
-          // Auto-finish once when timer hits 0
-          if (!finished) finishMatch();
-          return 0;
-        }
-        return next;
-      });
-    }, 1000);
-    return () => clearInterval(iv);
-  }, [matchId, finished, finishMatch]);
-
   const startMatch = useCallback(async () => {
     if (!selectedAgentId) {
       setError("Select an agent to start");
@@ -125,10 +85,6 @@ export default function MatchPage() {
       setLoading(false);
     }
   }, [backendMode, selectedAgentId]);
-
-  const nextRound = () => {
-    if (round < ROUNDS) setRound((r) => r + 1);
-  };
 
   const judgeNow = useCallback(async () => {
     // If match not started yet, start it first
@@ -233,11 +189,6 @@ export default function MatchPage() {
     }
   }, [matchId, startMatch]);
 
-  const copyCid = (cid: string) => {
-    if (!cid) return;
-    navigator?.clipboard?.writeText(cid).catch(() => {});
-  };
-
   const confirmIntent = useCallback(async () => {
     setConfirmLoading(true);
     setConfirmError(null);
@@ -281,7 +232,14 @@ export default function MatchPage() {
     }
   }, [confirmTx, confirmProof, matchId, startMatch]);
 
-  const progress = (evaluations.length / ROUNDS) * 100;
+  const nextRound = () => {
+    if (round < ROUNDS) setRound((r) => r + 1);
+  };
+
+  const copyCid = (cid: string) => {
+    if (!cid) return;
+    navigator?.clipboard?.writeText(cid).catch(() => {});
+  };
 
   const handleShare = useCallback(() => {
     if (!matchId) return;
@@ -289,6 +247,47 @@ export default function MatchPage() {
     navigator?.clipboard?.writeText(url).then(() => setShareMsg("Link copied!"));
     setTimeout(() => setShareMsg(null), 2000);
   }, [matchId]);
+
+  // Load agents for selection
+  useEffect(() => {
+    const loadAgents = async () => {
+      try {
+        setError(null);
+        const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
+        const res = await fetch(`/api/agents?page=1&pageSize=20`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        const json = await res.json();
+        if (!res.ok || !json?.ok) throw new Error(json?.error || `Failed ${res.status}`);
+        const list: Array<{ id: number; name: string }> = (json.data?.agents || []).map((a: any) => ({ id: a.id, name: a.name }));
+        setAgents(list);
+        if (list.length && !selectedAgentId) setSelectedAgentId(list[0].id);
+      } catch (e: any) {
+        setError(e?.message || "Failed to load agents");
+      }
+    };
+    loadAgents();
+  }, []);
+
+  // Start/maintain 30s countdown when match is active
+  useEffect(() => {
+    if (!matchId || finished) return;
+    setSecondsLeft((s) => (s <= 0 ? 30 : s));
+    const iv = setInterval(() => {
+      setSecondsLeft((prev) => {
+        const next = prev - 1;
+        if (next <= 0) {
+          clearInterval(iv);
+          if (!finished) finishMatch();
+          return 0;
+        }
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [matchId, finished, finishMatch]);
+
+  const progress = (evaluations.length / ROUNDS) * 100;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
