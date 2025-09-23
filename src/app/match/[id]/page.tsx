@@ -5,6 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { WinBurst } from "./WinBurst";
 import { ShareBar } from "./ShareBar";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import { generateResponse } from '@/lib/gemini';
 
 async function getMatch(id: string) {
   const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/match/${id}`, { cache: "no-store" });
@@ -106,6 +109,72 @@ export default async function MatchReplayPage({ params }: { params: { id: string
     if (w === 'b' || w === '2' || w === 'seat 2') return b?.name || 'Seat 2';
     return overallWinnerRaw; // already a human-readable label
   })();
+
+  const [rounds, setRounds] = useState([]);
+  const [currentRound, setCurrentRound] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  const startRound = async (idx: number) => {
+    setLoading(true);
+    const res = await fetch(`/api/match/${params.id}/round`, {
+      method: 'POST',
+      body: JSON.stringify({ idx, mode: match.mode, agentAId: a?.id, agentBId: b?.id }),
+    });
+    const data = await res.json();
+    setRounds(prev => [...prev, data.data]);
+    setCurrentRound(idx + 1);
+    setLoading(false);
+    if (data.data.judgeScores) {
+      toast.success(`Round ${idx+1} scored!`);
+    }
+  };
+
+  const finishMatch = async () => {
+    const res = await fetch(`/api/match/${params.id}/finish`, { method: 'POST', body: JSON.stringify({ summary: 'Battle complete' }) });
+    const { data } = await res.json();
+    setMatchResult(data);
+    toast.success(`Winner: ${data.winner}! View on IPFS: ${data.ipfsCid}`);
+  };
+
+  if (currentRound < 3) {
+    return (
+      <div className="flex flex-col md:flex-row gap-8">
+        <div className="flex-1">
+          <h2>Round {currentRound + 1}/3</h2>
+          <p className="mb-4">{rounds[currentRound]?.question || 'Click to start'}</p>
+          <Button onClick={() => startRound(currentRound)} disabled={loading}>Generate Responses</Button>
+          {loading && <div>Generating... (Gemini AI)</div>}
+        </div>
+        {rounds[currentRound]?.answerA && (
+          <div className="flex-1 border-l pl-4">
+            <h3>Agent A Response</h3>
+            <p>{rounds[currentRound].answerA}</p>
+          </div>
+        )}
+        {rounds[currentRound]?.answerB && (
+          <div className="flex-1">
+            <h3>Agent B Response</h3>
+            <p>{rounds[currentRound].answerB}</p>
+          </div>
+        )}
+        {rounds[currentRound]?.judgeScores && (
+          <div className="w-full mt-4">
+            <h3>Scores</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <Card>
+                <CardContent>A: {JSON.parse(rounds[currentRound].judgeScores).scoreA.style + ...} total</CardContent>
+              </Card>
+              <Card>
+                <CardContent>B: {JSON.parse(rounds[currentRound].judgeScores).scoreB.style + ...} total</CardContent>
+              </Card>
+            </div>
+            <p>Winner: {JSON.parse(rounds[currentRound].judgeScores).winner}</p>
+          </div>
+        )}
+        {currentRound === 3 && <Button onClick={finishMatch}>Finish Battle</Button>}
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

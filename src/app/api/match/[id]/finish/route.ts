@@ -4,6 +4,8 @@ import { matches, matchPlayers, rounds, agents } from '@/db/schema';
 import { and, eq, sum, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { getGolemClient, createMatchEntity } from '@/lib/golem-client';
+import { pinMatchData, getMatchViaCID } from '@/lib/ipfs';
+import { signIntent } from '@/lib/near-wallet'; // Assume wallet context passed or global
 
 const finishMatchSchema = z.object({
   summary: z.string().optional(),
@@ -176,13 +178,45 @@ export async function POST(
       // Continue; local save succeeds even if Golem fails
     }
 
+    // Pin to IPFS
+    const matchData = {
+      id: matchId,
+      mode: updatedMatch.mode,
+      agents: { a: agentA, b: agentB },
+      rounds: matchRounds,
+      scores: { totalA: totalScoreA, totalB: totalScoreB },
+      winner,
+      summary,
+      timestamp: Date.now(),
+    };
+
+    const ipfsCid = await pinMatchData(matchData);
+
+    // Sign NEAR intent (simplified; in prod, use signed tx from user)
+    const nearTxHash = await signIntent({ type: 'battle', matchId, ipfsCid });
+
+    // Update match
+    await db.update(matches).set({
+      status: 'completed',
+      winner,
+      scoreA: totalScoreA,
+      scoreB: totalScoreB,
+      agentAId,
+      agentBId,
+      summary,
+      ipfsCid,
+      nearTxHash,
+    }).where(eq(matches.id, matchId));
+
     return NextResponse.json({
       ok: true,
-      data: {
+      data: { 
         match: updatedMatch,
         scores: { scoreA: totalScoreA, scoreB: totalScoreB },
         winner,
-        agents: { a: agentA, b: agentB },
+        ipfsCid,
+        nearTxHash,
+        viewLink: getMatchViaCID(ipfsCid)
       },
     });
   } catch (error) {

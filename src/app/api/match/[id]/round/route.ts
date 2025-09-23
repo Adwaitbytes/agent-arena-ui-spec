@@ -4,6 +4,13 @@ import { matches, rounds } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { isPinataConfigured, pinJSON } from '@/lib/pinata';
+import { generateResponse, scoreResponses } from '@/lib/gemini';
+
+const ROUND_PROMPTS = {
+  roast: ['Roast this silly idea: pineapple on pizza.', 'Deep roast a celebrity chef\'s failed recipe.', 'Ultimate legacy burn on outdated tech trends.'],
+  writing: ['Write a 100-word micro-story about lost keys.', 'Add a plot twist to a mystery tale.', 'Craft a full 200-word narrative finale.'],
+  duel: ['Solve: If A > B and B = C, is A = C?', 'Debate: Crypto vs. traditional finance.', 'Strategize winning a zero-sum game.'],
+};
 
 const createRoundSchema = z.object({
   idx: z.number().int().min(0),
@@ -48,7 +55,25 @@ export async function POST(
       );
     }
 
-    const { idx, question, ipfsCid, judgeScores, resultSummary, answers, answerA, answerB } = validation.data as any;
+    const { idx, agentAId, agentBId, mode } = body;
+    const prompt = ROUND_PROMPTS[mode][idx];
+
+    // Fetch agents
+    const [agentA, agentB] = await Promise.all([
+      db.select().from(agents).where(eq(agents.id, agentAId)).first(),
+      db.select().from(agents).where(eq(agents.id, agentBId)).first(),
+    ]);
+
+    if (!agentA || !agentB) return NextResponse.json({ ok: false, error: 'Agents not found' }, { status: 404 });
+
+    // Generate responses parallel
+    const [responseA, responseB] = await Promise.all([
+      generateResponse(agentA.promptProfile, prompt, mode),
+      generateResponse(agentB.promptProfile, prompt, mode),
+    ]);
+
+    // Score
+    const scores = await scoreResponses(responseA, responseB, prompt, mode);
 
     // Optionally pin round payload to IPFS via Pinata when configured and no CID provided
     let ipfsCidToUse: string | null = ipfsCid || null;
@@ -75,12 +100,12 @@ export async function POST(
     const [newRound] = await db.insert(rounds).values({
       matchId,
       idx,
-      question,
+      question: prompt,
+      answerA: responseA,
+      answerB: responseB,
+      judgeScores: JSON.stringify(scores),
       ipfsCid: ipfsCidToUse,
-      judgeScores: judgeScores || null,
       resultSummary: resultSummary || null,
-      answerA: answerA || null,
-      answerB: answerB || null,
       createdAt: Date.now(),
     }).returning();
 
