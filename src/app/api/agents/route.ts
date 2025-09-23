@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { agents } from '@/db/schema';
-import { count, desc } from 'drizzle-orm';
+import { count, desc, eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 
 const createAgentSchema = z.object({
@@ -9,6 +9,8 @@ const createAgentSchema = z.object({
   promptProfile: z.string().min(1).transform(s => s.trim()),
   memorySnippets: z.array(z.string()).optional(),
   ownerUserId: z.number().optional().nullable(),
+  ownerAccountId: z.string().optional().nullable(),
+  isPublic: z.boolean().optional().default(false),
 });
 
 export async function GET(request: NextRequest) {
@@ -17,18 +19,38 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20')));
     const offset = (page - 1) * pageSize;
+    const publicOnly = searchParams.get('public') === 'true';
+    const ownerId = searchParams.get('ownerId'); // For filtering by owner
 
-    // Get total count
-    const [totalResult] = await db.select({ count: count() }).from(agents);
+    // Build the query conditions
+    let whereConditions = [];
+    if (publicOnly) {
+      whereConditions.push(eq(agents.isPublic, true));
+    }
+    if (ownerId) {
+      whereConditions.push(eq(agents.ownerAccountId, ownerId));
+    }
+
+    // Get total count with conditions
+    const countQuery = whereConditions.length > 0
+      ? db.select({ count: count() }).from(agents).where(
+        whereConditions.length === 1 ? whereConditions[0] :
+          and(...whereConditions)
+      )
+      : db.select({ count: count() }).from(agents);
+
+    const [totalResult] = await countQuery;
     const total = totalResult.count;
 
-    // Get paginated agents
-    const agentsList = await db
-      .select()
-      .from(agents)
-      .orderBy(desc(agents.createdAt))
-      .limit(pageSize)
-      .offset(offset);
+    // Get paginated agents with conditions
+    const agentsQuery = whereConditions.length > 0
+      ? db.select().from(agents).where(
+        whereConditions.length === 1 ? whereConditions[0] :
+          and(...whereConditions)
+      ).orderBy(desc(agents.createdAt)).limit(pageSize).offset(offset)
+      : db.select().from(agents).orderBy(desc(agents.createdAt)).limit(pageSize).offset(offset);
+
+    const agentsList = await agentsQuery;
 
     return NextResponse.json({
       ok: true,
@@ -63,7 +85,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, promptProfile, memorySnippets, ownerUserId } = validation.data;
+    const { name, promptProfile, memorySnippets, ownerUserId, ownerAccountId, isPublic } = validation.data;
 
     const [newAgent] = await db.insert(agents).values({
       name,
@@ -71,6 +93,8 @@ export async function POST(request: NextRequest) {
       memorySnippets: memorySnippets || null,
       stats: { wins: 0, losses: 0, mmr: 1000 },
       ownerUserId: ownerUserId || null,
+      ownerAccountId: ownerAccountId || null,
+      isPublic: isPublic || false,
       createdAt: Date.now(),
     }).returning();
 

@@ -3,10 +3,12 @@ import { sqliteTable, integer, text } from 'drizzle-orm/sqlite-core';
 export const agents = sqliteTable('agents', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   ownerUserId: integer('owner_user_id'),
+  ownerAccountId: text('owner_account_id'), // NEAR account ID
   name: text('name', { length: 80 }).notNull(),
   promptProfile: text('prompt_profile').notNull(),
   memorySnippets: text('memory_snippets', { mode: 'json' }),
   stats: text('stats', { mode: 'json' }),
+  isPublic: integer('is_public', { mode: 'boolean' }).default(false),
   createdAt: integer('created_at').notNull(),
 });
 

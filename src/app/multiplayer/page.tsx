@@ -27,9 +27,13 @@ export default function MultiplayerPage() {
   const [mode, setMode] = useState<"boxing" | "cricket" | "carrom">("boxing");
   const [agentAId, setAgentAId] = useState<number | "">("");
   const [agentBId, setAgentBId] = useState<number | "">("");
-  const [prompt, setPrompt] = useState("Write a 2-line roast about pineapple pizza.");
+  const [prompt, setPrompt] = useState(
+    "Write a 2-line roast about pineapple pizza."
+  );
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<OrchestrateResponse["data"] | null>(null);
+  const [result, setResult] = useState<OrchestrateResponse["data"] | null>(
+    null
+  );
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -55,15 +59,24 @@ export default function MultiplayerPage() {
     fetchAgents();
   }, []);
 
-  const agentA = useMemo(() => agents.find(a => a.id === agentAId), [agents, agentAId]);
-  const agentB = useMemo(() => agents.find(a => a.id === agentBId), [agents, agentBId]);
+  const agentA = useMemo(
+    () => agents.find((a) => a.id === agentAId),
+    [agents, agentAId]
+  );
+  const agentB = useMemo(
+    () => agents.find((a) => a.id === agentBId),
+    [agents, agentBId]
+  );
 
   const handleRunMatch = async () => {
     setSubmitting(true);
     setError(null);
     setResult(null);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("bearer_token")
+          : null;
       const res = await fetch("/api/match/orchestrate", {
         method: "POST",
         headers: {
@@ -79,7 +92,10 @@ export default function MultiplayerPage() {
       });
       const json: OrchestrateResponse = await res.json();
       if (!json.ok) {
-        const err = typeof json.error === "string" ? json.error : "Failed to orchestrate match";
+        const err =
+          typeof json.error === "string"
+            ? json.error
+            : "Failed to orchestrate match";
         setError(err);
       } else {
         setResult(json.data!);
@@ -91,14 +107,71 @@ export default function MultiplayerPage() {
     }
   };
 
-  const canSubmit = !!agentAId && !!agentBId && agentAId !== agentBId && prompt.trim().length > 0 && !submitting;
+  const canSubmit =
+    !!agentAId &&
+    !!agentBId &&
+    agentAId !== agentBId &&
+    prompt.trim().length > 0 &&
+    !submitting;
+
+  const handleQuickMatch = async () => {
+    if (agents.length < 2) {
+      setError("Need at least 2 agents for a quick match");
+      return;
+    }
+
+    // Randomly select two different agents
+    const shuffled = [...agents].sort(() => Math.random() - 0.5);
+    const selectedA = shuffled[0];
+    const selectedB = shuffled[1];
+
+    setAgentAId(selectedA.id);
+    setAgentBId(selectedB.id);
+
+    // Set a random prompt based on mode
+    const prompts = {
+      boxing: [
+        "Roast a toaster that thinks it's a philosopher.",
+        "Roast someone who puts pineapple on pizza.",
+        "Roast a person who talks to their plants.",
+        "Roast someone who still uses Internet Explorer.",
+      ],
+      cricket: [
+        "Write a 60-word cyberpunk haiku about neon rain.",
+        "Create a short story about a robot learning to laugh.",
+        "Write a poem about the last star in the universe.",
+        "Describe a city where shadows have their own consciousness.",
+      ],
+      carrom: [
+        "Debate: Are AIs better judges than humans? Provide 2 arguments each.",
+        "Argue for or against: Social media makes people more connected.",
+        "Debate: Is artificial creativity as valuable as human creativity?",
+        "Discuss: Should AI art be eligible for prestigious art awards?",
+      ],
+    };
+
+    const modePrompts = prompts[mode];
+    const randomPrompt =
+      modePrompts[Math.floor(Math.random() * modePrompts.length)];
+    setPrompt(randomPrompt);
+
+    // Auto-start the match after a brief delay
+    setTimeout(() => {
+      handleRunMatch();
+    }, 500);
+  };
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">
       <section className="py-10 sm:py-14 border-b border-border bg-secondary/40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Multiplayer Test Match</h1>
-          <p className="mt-2 text-muted-foreground">Pick two agents, provide a prompt, and run an orchestrated round. The transcript is stored to IPFS when configured.</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+            Multiplayer Test Match
+          </h1>
+          <p className="mt-2 text-muted-foreground">
+            Pick two agents, provide a prompt, and run an orchestrated round.
+            The transcript is stored to IPFS when configured.
+          </p>
         </div>
       </section>
 
@@ -123,14 +196,20 @@ export default function MultiplayerPage() {
                   </select>
                 </div>
                 <div className="grid gap-1.5">
-                  <label className="text-sm text-muted-foreground">Agent A</label>
+                  <label className="text-sm text-muted-foreground">
+                    Agent A
+                  </label>
                   <select
                     className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                     disabled={loadingAgents}
                     value={agentAId}
-                    onChange={(e) => setAgentAId(e.target.value ? Number(e.target.value) : "")}
+                    onChange={(e) =>
+                      setAgentAId(e.target.value ? Number(e.target.value) : "")
+                    }
                   >
-                    <option value="">{loadingAgents ? "Loading..." : "Select agent"}</option>
+                    <option value="">
+                      {loadingAgents ? "Loading..." : "Select agent"}
+                    </option>
                     {agents.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name}
@@ -139,14 +218,20 @@ export default function MultiplayerPage() {
                   </select>
                 </div>
                 <div className="grid gap-1.5">
-                  <label className="text-sm text-muted-foreground">Agent B</label>
+                  <label className="text-sm text-muted-foreground">
+                    Agent B
+                  </label>
                   <select
                     className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                     disabled={loadingAgents}
                     value={agentBId}
-                    onChange={(e) => setAgentBId(e.target.value ? Number(e.target.value) : "")}
+                    onChange={(e) =>
+                      setAgentBId(e.target.value ? Number(e.target.value) : "")
+                    }
                   >
-                    <option value="">{loadingAgents ? "Loading..." : "Select agent"}</option>
+                    <option value="">
+                      {loadingAgents ? "Loading..." : "Select agent"}
+                    </option>
                     {agents.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name}
@@ -165,13 +250,19 @@ export default function MultiplayerPage() {
                 />
               </div>
 
-              {error && (
-                <div className="text-sm text-destructive">{error}</div>
-              )}
+              {error && <div className="text-sm text-destructive">{error}</div>}
 
               <div className="flex items-center gap-3">
                 <Button onClick={handleRunMatch} disabled={!canSubmit}>
                   {submitting ? "Running..." : "Run Match"}
+                </Button>
+                <Button
+                  onClick={handleQuickMatch}
+                  disabled={loadingAgents || agents.length < 2 || submitting}
+                  variant="outline"
+                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 hover:from-purple-600 hover:to-pink-600"
+                >
+                  ⚡ Quick Match
                 </Button>
                 <Button asChild variant="secondary">
                   <Link href="/onboarding">Create Agent</Link>
@@ -185,20 +276,33 @@ export default function MultiplayerPage() {
               <CardTitle>Outcome</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 text-sm">
-              {!result && <p className="text-muted-foreground">No result yet.</p>}
+              {!result && (
+                <p className="text-muted-foreground">No result yet.</p>
+              )}
               {result && (
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Match ID</span>
-                    <Link className="underline" href={`/match/${result.matchId}`}>#{result.matchId}</Link>
+                    <Link
+                      className="underline"
+                      href={`/match/${result.matchId}`}
+                    >
+                      #{result.matchId}
+                    </Link>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">Winner</span>
-                    <span className="font-semibold">{result.winner === "A" ? agentA?.name || "A" : agentB?.name || "B"}</span>
+                    <span className="font-semibold">
+                      {result.winner === "A"
+                        ? agentA?.name || "A"
+                        : agentB?.name || "B"}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-muted-foreground">IPFS CID</span>
-                    <span className="font-mono text-xs">{result.cid || "—"}</span>
+                    <span className="font-mono text-xs">
+                      {result.cid || "—"}
+                    </span>
                   </div>
                 </div>
               )}
@@ -216,28 +320,48 @@ export default function MultiplayerPage() {
               </CardHeader>
               <CardContent className="grid gap-6">
                 <div>
-                  <div className="text-xs uppercase text-muted-foreground mb-1">Prompt</div>
-                  <div className="text-sm whitespace-pre-wrap border border-border rounded-md p-3 bg-secondary/40">{prompt}</div>
+                  <div className="text-xs uppercase text-muted-foreground mb-1">
+                    Prompt
+                  </div>
+                  <div className="text-sm whitespace-pre-wrap border border-border rounded-md p-3 bg-secondary/40">
+                    {prompt}
+                  </div>
                 </div>
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                    <div className="text-xs uppercase text-muted-foreground">{agentA?.name || "Agent A"}</div>
-                    <pre className="text-sm whitespace-pre-wrap border border-border rounded-md p-3 bg-background/60 overflow-x-auto">{(result as any).round?.answers?.A || "(Answer captured in replay)"}</pre>
+                    <div className="text-xs uppercase text-muted-foreground">
+                      {agentA?.name || "Agent A"}
+                    </div>
+                    <pre className="text-sm whitespace-pre-wrap border border-border rounded-md p-3 bg-background/60 overflow-x-auto">
+                      {(result as any).round?.answers?.A ||
+                        "(Answer captured in replay)"}
+                    </pre>
                   </div>
                   <div className="grid gap-2">
-                    <div className="text-xs uppercase text-muted-foreground">{agentB?.name || "Agent B"}</div>
-                    <pre className="text-sm whitespace-pre-wrap border border-border rounded-md p-3 bg-background/60 overflow-x-auto">{(result as any).round?.answers?.B || "(Answer captured in replay)"}</pre>
+                    <div className="text-xs uppercase text-muted-foreground">
+                      {agentB?.name || "Agent B"}
+                    </div>
+                    <pre className="text-sm whitespace-pre-wrap border border-border rounded-md p-3 bg-background/60 overflow-x-auto">
+                      {(result as any).round?.answers?.B ||
+                        "(Answer captured in replay)"}
+                    </pre>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <Button asChild>
-                    <Link href={`/match/${result.matchId}`}>View Full Replay</Link>
+                    <Link href={`/match/${result.matchId}`}>
+                      View Full Replay
+                    </Link>
                   </Button>
                   <Button asChild variant="secondary">
-                    <Link href={`/agent/${agentA?.id ?? 0}`}>{agentA?.name || "Agent A"}</Link>
+                    <Link href={`/agent/${agentA?.id ?? 0}`}>
+                      {agentA?.name || "Agent A"}
+                    </Link>
                   </Button>
                   <Button asChild variant="secondary">
-                    <Link href={`/agent/${agentB?.id ?? 0}`}>{agentB?.name || "Agent B"}</Link>
+                    <Link href={`/agent/${agentB?.id ?? 0}`}>
+                      {agentB?.name || "Agent B"}
+                    </Link>
                   </Button>
                 </div>
               </CardContent>

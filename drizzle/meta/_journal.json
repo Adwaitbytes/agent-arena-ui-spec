@@ -8,6 +8,13 @@
       "when": 1758573268312,
       "tag": "0000_third_banshee",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1758618989974,
+      "tag": "0001_odd_vulcan",
+      "breakpoints": true
     }
   ]
 }

@@ -3,69 +3,206 @@ import { z } from "zod";
 import { db } from "@/db";
 import { agents, matches, matchPlayers, rounds } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { pinJSON, isPinataConfigured } from '@/lib/pinata';
 
 const orchestrateSchema = z.object({
   mode: z.enum(["boxing", "cricket", "carrom"]).default("boxing"),
   agentAId: z.number().int().positive(),
-  agentBId: z.number().int().positive().refine((v, ctx) => {
-    const { agentAId } = (ctx as any).parent || {};
-    return typeof agentAId !== "number" || v !== agentAId;
-  }, { message: "agentBId must be different from agentAId" }),
+  agentBId: z.number().int().positive(),
   prompt: z.string().min(1).max(2000),
 });
 
-async function maybeUploadToIPFS(filename: string, data: any): Promise<string | null> {
+async function uploadToPinata(filename: string, data: any): Promise<string | null> {
   try {
-    const token = process.env.WEB3_STORAGE_TOKEN;
-    if (!token) return null;
-    const { Web3Storage, File } = await import("web3.storage");
-    const client = new Web3Storage({ token });
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const file = new File([blob], filename, { type: "application/json" });
-    const cid = await client.put([file], { name: filename, wrapWithDirectory: false });
-    return cid;
-  } catch (e) {
-    console.error("IPFS upload failed:", e);
+    if (!isPinataConfigured()) {
+      console.log('Pinata not configured, skipping upload');
+      return null;
+    }
+
+    const result = await pinJSON(data, {
+      name: filename,
+      keyvalues: {
+        type: 'agent-match-response',
+        timestamp: new Date().toISOString(),
+      }
+    });
+
+    console.log(`Uploaded to Pinata: ${result.IpfsHash}`);
+    return result.IpfsHash;
+  } catch (error) {
+    console.error('Pinata upload failed:', error);
     return null;
   }
 }
 
-async function callOpenServe(prompt: string, aProfile: string, bProfile: string) {
-  // Minimal stub: if OPENSERV_API_KEY exists and OPENSERV_API_BASE provided, you could call real API here.
-  // To avoid external failures, return a deterministic mock transcript for now.
-  const seed = (s: string) => Array.from(s).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  const sa = seed(aProfile + prompt) % 100;
-  const sb = seed(bProfile + prompt) % 100;
-  const aAnswer = `Agent A riff (${sa}): ${prompt}\nResponse showcasing creativity, structure, and flair.`;
-  const bAnswer = `Agent B riff (${sb}): ${prompt}\nResponse emphasizing logic, humor, and style.`;
-  return {
-    engine: process.env.OPENSERV_API_KEY ? "mock-openserve" : "mock-local",
-    answers: {
-      a: aAnswer,
-      b: bAnswer,
-    },
-  } as const;
+async function callGeminiAPI(prompt: string, aProfile: string, bProfile: string, aName: string, bName: string) {
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('Gemini API key not configured');
+    }
+
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    // Generate response for Agent A
+    const promptA = `You are an AI agent named "${aName}" with the following personality and instructions:
+
+${aProfile}
+
+Now respond to this challenge: "${prompt}"
+
+Important guidelines:
+- Stay true to your character/prompt personality
+- Be creative and engaging
+- Keep responses under 200 words
+- If your prompt involves roasting/comedy, be witty but not offensive
+- If your prompt involves other styles (poetic, logical, etc.), embody that style
+- Generate a response that showcases your unique personality
+
+Respond as your character would:`;
+
+    const promptB = `You are an AI agent named "${bName}" with the following personality and instructions:
+
+${bProfile}
+
+Now respond to this challenge: "${prompt}"
+
+Important guidelines:
+- Stay true to your character/prompt personality
+- Be creative and engaging
+- Keep responses under 200 words
+- If your prompt involves roasting/comedy, be witty but not offensive
+- If your prompt involves other styles (poetic, logical, etc.), embody that style
+- Generate a response that showcases your unique personality
+
+Respond as your character would:`;
+
+    // Generate both responses
+    const [resultA, resultB] = await Promise.all([
+      model.generateContent(promptA),
+      model.generateContent(promptB)
+    ]);
+
+    const responseA = await resultA.response;
+    const responseB = await resultB.response;
+
+    return {
+      engine: "gemini-1.5-flash",
+      answers: {
+        a: responseA.text().trim(),
+        b: responseB.text().trim(),
+      },
+    };
+  } catch (error) {
+    console.error('Gemini API error:', error);
+    // Fallback to mock responses
+    const seed = (s: string) => Array.from(s).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+    const sa = seed(aProfile + prompt) % 100;
+    const sb = seed(bProfile + prompt) % 100;
+    const aAnswer = `${aName} response (${sa}): ${prompt}\nResponse showcasing creativity, structure, and flair.`;
+    const bAnswer = `${bName} response (${sb}): ${prompt}\nResponse emphasizing logic, humor, and style.`;
+    return {
+      engine: "mock-fallback",
+      answers: {
+        a: aAnswer,
+        b: bAnswer,
+      },
+    };
+  }
 }
 
-function judge(aText: string, bText: string) {
+async function superagentJudge(aText: string, bText: string, aName: string, bName: string, prompt: string, aProfile: string, bProfile: string) {
+  try {
+    const superagentKey = process.env.SUPERAGENT_GEMINI_KEY;
+    if (!superagentKey) {
+      console.log('Superagent key not configured, falling back to regular judge');
+      return judgeFallback(aText, bText);
+    }
+
+    const genAI = new GoogleGenerativeAI(superagentKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); // Use Flash for reliability
+
+    const superJudgePrompt = `You are a SUPERAGENT - an elite AI judge evaluating agent responses.
+
+CHALLENGE: "${prompt}"
+
+AGENT A (${aName}): "${aText}"
+AGENT B (${bName}): "${bText}"
+
+Rate each response 0-10 on:
+- Creativity: How original and imaginative
+- Style: Language quality and personality match  
+- Relevance: How well it addresses the prompt
+- Engagement: How compelling and memorable
+
+Respond with ONLY this JSON format:
+{
+  "scores": {
+    "creativity": {"A": 8, "B": 7},
+    "style": {"A": 9, "B": 8}, 
+    "relevance": {"A": 10, "B": 9},
+    "engagement": {"A": 8, "B": 7}
+  },
+  "winner": "A",
+  "summary": "Agent A wins with superior creativity and style"
+}`;
+
+    const result = await model.generateContent(superJudgePrompt);
+    const response = await result.response;
+    const text = response.text().trim();
+
+    // Try to extract JSON from response
+    let jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('No JSON found in superagent response:', text);
+      return judgeFallback(aText, bText);
+    }
+
+    try {
+      const judgment = JSON.parse(jsonMatch[0]);
+
+      // Calculate totals
+      const totalA = Object.values(judgment.scores).reduce((sum: number, category: any) => sum + category.A, 0);
+      const totalB = Object.values(judgment.scores).reduce((sum: number, category: any) => sum + category.B, 0);
+
+      // Add total scores
+      judgment.scores.total = { A: totalA, B: totalB };
+
+      // Mark as superagent judged
+      judgment.superagent = true;
+
+      return judgment;
+    } catch (parseError) {
+      console.error('Failed to parse superagent judge response:', text);
+      return judgeFallback(aText, bText);
+    }
+  } catch (error) {
+    console.error('Superagent judge error:', error);
+    return judgeFallback(aText, bText);
+  }
+} function judgeFallback(aText: string, bText: string) {
   // Simple judge: score by length variety and characters diversity
   const diversity = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9]/g, "").split("")).size;
   const creativityA = Math.min(10, Math.round(diversity(aText) / 5));
   const creativityB = Math.min(10, Math.round(diversity(bText) / 5));
   const styleA = Math.min(10, Math.round((aText.match(/[,.!?]/g)?.length || 0) / 3));
   const styleB = Math.min(10, Math.round((bText.match(/[,.!?]/g)?.length || 0) / 3));
-  const totalA = creativityA + styleA;
-  const totalB = creativityB + styleB;
+  const relevanceA = Math.min(10, Math.round(aText.length / 20));
+  const relevanceB = Math.min(10, Math.round(bText.length / 20));
+  const totalA = creativityA + styleA + relevanceA;
+  const totalB = creativityB + styleB + relevanceB;
   const winner = totalA === totalB ? (aText.length >= bText.length ? "A" : "B") : (totalA > totalB ? "A" : "B");
   return {
     scores: {
       creativity: { A: creativityA, B: creativityB },
       style: { A: styleA, B: styleB },
+      relevance: { A: relevanceA, B: relevanceB },
       total: { A: totalA, B: totalB },
     },
     winner,
     summary: winner === "A" ? "Agent A edged out with more expressive variety." : "Agent B prevailed with tighter phrasing and punctuation cadence.",
-  } as const;
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -99,15 +236,15 @@ export async function POST(req: NextRequest) {
 
     // Seat players
     await db.insert(matchPlayers).values([
-      { matchId: match.id, agentId: agentAId, userId: agentA.ownerUserId || null, seat: 0, createdAt: Date.now() },
-      { matchId: match.id, agentId: agentBId, userId: agentB.ownerUserId || null, seat: 1, createdAt: Date.now() },
+      { matchId: match.id, agentId: agentAId, userId: agentA.ownerUserId, seat: 0, createdAt: Date.now() },
+      { matchId: match.id, agentId: agentBId, userId: agentB.ownerUserId, seat: 1, createdAt: Date.now() },
     ]);
 
-    // Ask OpenServe (mocked) for answers
-    const os = await callOpenServe(prompt, agentA.promptProfile, agentB.promptProfile);
+    // Ask Gemini API for answers
+    const os = await callGeminiAPI(prompt, agentA.promptProfile, agentB.promptProfile, agentA.name, agentB.name);
 
-    // Judge
-    const verdict = judge(os.answers.a, os.answers.b);
+    // Judge the responses using superagent
+    const verdict = await superagentJudge(os.answers.a, os.answers.b, agentA.name, agentB.name, prompt, agentA.promptProfile, agentB.promptProfile);
 
     // Build transcript
     const transcript = {
@@ -125,8 +262,8 @@ export async function POST(req: NextRequest) {
       timestamps: { createdAt: Date.now() },
     };
 
-    // Upload to IPFS when available
-    const cid = await maybeUploadToIPFS(`match-${match.id}-round-0.json`, transcript);
+    // Upload to Pinata
+    const cid = await uploadToPinata(`match-${match.id}-round-0.json`, transcript);
 
     // Persist round
     const [round] = await db.insert(rounds).values({
@@ -142,7 +279,24 @@ export async function POST(req: NextRequest) {
     // Complete match
     await db.update(matches).set({ status: "completed", endedAt: Date.now() }).where(eq(matches.id, match.id));
 
-    return NextResponse.json({ ok: true, data: { matchId: match.id, round, cid, winner: verdict.winner } }, { status: 201 });
+    return NextResponse.json({
+      ok: true,
+      data: {
+        matchId: match.id,
+        round,
+        cid,
+        winner: verdict.winner,
+        transcript: {
+          answers: { A: os.answers.a, B: os.answers.b },
+          agents: {
+            A: { id: agentAId, name: agentA.name },
+            B: { id: agentBId, name: agentB.name },
+          },
+          prompt,
+          scores: verdict.scores
+        }
+      }
+    }, { status: 201 });
   } catch (e) {
     console.error("POST /api/match/orchestrate error:", e);
     return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
