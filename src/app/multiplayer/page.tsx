@@ -41,7 +41,12 @@ export default function MultiplayerPage() {
     let mounted = true;
     const fetchAgents = async () => {
       try {
-        const res = await fetch("/api/agents");
+        const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
+        const res = await fetch("/api/agents", {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
         const json = await res.json();
         if (!mounted) return;
         const list: Agent[] = (json?.data || json) as any;
@@ -230,6 +235,11 @@ export default function MultiplayerPage() {
               </select>
             </label>
           </div>
+
+          {/* Empty state hint when no agents */}
+          {agents.length === 0 && (
+            <div className="text-xs text-muted-foreground">No agents found. Create one first in Onboarding.</div>
+          )}
 
           <label className="grid gap-1 text-sm">
             <span className="text-muted-foreground">Prompt</span>
