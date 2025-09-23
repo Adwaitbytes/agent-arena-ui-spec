@@ -9,10 +9,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
-import { Switch } from "@/components/ui/switch";
-import { connectWallet, signIntent } from '@/lib/near-wallet';
-import { POST } from '@/app/api/agents/route'; // Assume export for reuse
 
 export default function OnboardingPage() {
   const [mode, setMode] = useState<"single" | "multi">("single");
@@ -24,8 +20,6 @@ export default function OnboardingPage() {
   const [timeLeft, setTimeLeft] = useState(60);
   const [running, setRunning] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const [nearAccount, setNearAccount] = useState<string | null>(null);
-  const [isPublic, setIsPublic] = useState(false);
 
   useEffect(() => {
     if (!running || mode !== "multi") return;
@@ -47,27 +41,34 @@ export default function OnboardingPage() {
     setRunning(true);
   };
 
-  const handleWalletConnect = async () => {
+  const handleSubmit = async () => {
+    if (!isValid || submitting) return;
+    setSubmitting(true);
+    setError(null);
     try {
-      const account = await connectWallet();
-      setNearAccount(account);
-      toast.success(`Connected: ${account}`);
-    } catch (e) {
-      toast.error('Wallet connection failed');
-    }
-  };
-
-  const handleSubmit = async (formData: any) => {
-    if (!nearAccount) {
-      toast.error('Connect wallet first');
-      return;
-    }
-    const agentData = { ...formData, ownerNearAccount: nearAccount, isPublic };
-    const res = await fetch('/api/agents', { method: 'POST', body: JSON.stringify(agentData) });
-    if (res.ok) {
-      const txHash = await signIntent({ agentId: (await res.json()).data.id, type: 'create' });
-      toast.success(`Agent created! Tx: ${txHash}`);
-      router.push('/arena');
+      const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: agentName.trim(),
+          promptProfile: prompts[0].trim(),
+          memorySnippets: prompts.slice(1).map((p) => p).filter((p) => p.trim().length > 0),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || `Failed with status ${res.status}`);
+      }
+      // Navigate to agents list for now (profile page not yet implemented)
+      router.push("/agent?created=1");
+    } catch (e: any) {
+      setError(e?.message || "Failed to create agent");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -164,16 +165,6 @@ export default function OnboardingPage() {
                 <Button className="mt-2" variant="ghost" size="sm" onClick={() => setPrompts([`Preset: ${p} — describe style, strengths, weaknesses.`])}>Use preset</Button>
               </div>
             ))}
-          </div>
-
-          <div className="mb-4">
-            <Button onClick={handleWalletConnect} disabled={nearAccount}>Connect NEAR Wallet</Button>
-            {nearAccount && <p>Connected: {nearAccount.slice(0,6)}...{nearAccount.slice(-4)}</p>}
-          </div>
-
-          <div className="mb-4">
-            <label>Public Agent (browseable)?</label>
-            <Switch checked={isPublic} onCheckedChange={setIsPublic} />
           </div>
 
           {error && (

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { agents, matches, matchPlayers, rounds } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { golemClient, createMatchOnGolem } from "@/lib/golem-client";
 
 // Helper: safe dynamic Gemini
 async function generateWithGemini(prompt: string) {
@@ -130,12 +131,21 @@ export async function POST(req: NextRequest) {
     // Scores update
     await publish(origin, `match:${m.id}`, { type: "scored", matchId: m.id, scores: { scoreA, scoreB }, winner });
 
-    // Complete match
+    // Complete match (local Drizzle)
     await db.update(matches).set({ status: "completed", endedAt: Date.now() }).where(eq(matches.id, m.id));
 
     // Final broadcast
     await publish(origin, `match:${m.id}`, { type: "completed", matchId: m.id, roundId: r.id });
     await publish(origin, "ticker", { type: "match_result", matchId: m.id, a: { id: a.id, name: a.name }, b: { id: b.id, name: b.name }, winner, scores: { scoreA, scoreB } });
+
+    // New: Sync to Golem Base (decentralized)
+    await createMatchOnGolem({
+      id: m.id.toString(),
+      mode,
+      winner,
+      scores: { scoreA, scoreB },
+      createdAt: now,
+    });
 
     return NextResponse.json({ ok: true, data: { matchId: m.id, round: r, winner, scores: { scoreA, scoreB }, answers: { A: answerA, B: answerB } } });
   } catch (e) {

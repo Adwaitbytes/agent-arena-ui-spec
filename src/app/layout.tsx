@@ -5,8 +5,6 @@ import ErrorReporter from "@/components/ErrorReporter";
 import Script from "next/script";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { NearWalletProvider } from "@/lib/near/NearWalletProvider";
-import { Button } from '@/components/ui/button';
-import { connectWallet, disconnectWallet } from '@/lib/near-wallet';
 
 export const metadata: Metadata = {
   title: "Create Next App",

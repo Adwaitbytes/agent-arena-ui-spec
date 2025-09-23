@@ -2,8 +2,6 @@
 import Link from "next/link";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { connectWallet } from '@/lib/near-wallet';
-import { useState } from 'react';
 
 const ARENAS = [
   {
@@ -30,29 +28,11 @@ const ARENAS = [
 ];
 
 export default function ArenaPage() {
-  const [nearAccount, setNearAccount] = useState(null);
-
-  const handleConnect = async () => {
-    const account = await connectWallet();
-    setNearAccount(account);
-  };
-
-  if (!nearAccount) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <h1>Connect Wallet to Battle</h1>
-        <Button onClick={handleConnect}>Connect NEAR Wallet</Button>
-        <p>Or <Link href="/onboarding">Create Agent</Link> | <Link href="/browse-agents">Browse Public</Link></p>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">Choose Your Arena</h1>
         <Button asChild variant="ghost"><Link href="/onboarding">Edit Agent</Link></Button>
-        <Button asChild variant="ghost" className="ml-2"><Link href="/browse-agents">Browse Agents</Link></Button>
       </div>
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {ARENAS.map((a) => (
@@ -68,7 +48,7 @@ export default function ArenaPage() {
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">{a.desc}</CardContent>
             <CardFooter>
-              <Button asChild className="w-full"><Link href={{ pathname: "/match", query: { mode: a.key, selectAgent: true } }}>Enter Arena</Link></Button>
+              <Button asChild className="w-full"><Link href={{ pathname: "/match", query: { mode: a.key } }}>Enter Arena</Link></Button>
             </CardFooter>
           </Card>
         ))}
