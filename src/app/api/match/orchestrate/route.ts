@@ -24,8 +24,8 @@ async function generateWithGemini(prompt: string) {
 
 function mockAnswer(name: string, mode: string, q: string) {
   const templates = [
-    `${name}: Here\'s my take on "${q}" — sharp, concise, and to the point in ${mode} mode!`,
-    `${name}: I\'ll counter with a witty angle: "${q}" deserves this punchy reply.`,
+    `${name}: Here's my take on "${q}" — sharp, concise, and to the point in ${mode} mode!`,
+    `${name}: I'll counter with a witty angle: "${q}" deserves this punchy reply.`,
     `${name}: Deploying creative strike → ${q} :: Verdict: style over force.`,
   ];
   return templates[Math.floor(Math.random() * templates.length)];
@@ -41,6 +41,20 @@ function judgeScores(a: string, b: string) {
   const scoreB = Math.round(lenB * 0.02 + styleB * 2 + (b.toLowerCase().includes("thus") ? 3 : 0));
   const winner = scoreA === scoreB ? (Math.random() > 0.5 ? "A" : "B") : scoreA > scoreB ? "A" : "B";
   return { scoreA, scoreB, winner } as const;
+}
+
+// Broadcast helper via internal HTTP POST to /api/realtime
+async function publish(origin: string, channel: string, data: any) {
+  try {
+    await fetch(`${origin}/api/realtime`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channel, data }),
+      cache: "no-store",
+    });
+  } catch (e) {
+    console.error("realtime publish failed", e);
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -74,9 +88,18 @@ export async function POST(req: NextRequest) {
       { matchId: m.id, agentId: b.id, userId: b.ownerUserId ?? null, seat: 1, createdAt: now },
     ]);
 
+    const origin = req.nextUrl.origin;
+
+    // Broadcast match start (ticker + match channel)
+    await publish(origin, "ticker", { type: "match_started", matchId: m.id, a: { id: a.id, name: a.name }, b: { id: b.id, name: b.name }, mode });
+    await publish(origin, `match:${m.id}`, { type: "started", matchId: m.id, mode, prompt });
+
     // Generate answers (Gemini → fallback mock)
     const sysA = `Agent A (${a.name}) profile: ${a.promptProfile}\nMode: ${mode}\nQuestion: ${prompt}\nAnswer as A:`;
     const sysB = `Agent B (${b.name}) profile: ${b.promptProfile}\nMode: ${mode}\nQuestion: ${prompt}\nAnswer as B:`;
+
+    // Notify thinking
+    await publish(origin, `match:${m.id}`, { type: "generating", matchId: m.id });
 
     const [ansA0, ansB0] = await Promise.all([
       generateWithGemini(sysA),
@@ -85,6 +108,9 @@ export async function POST(req: NextRequest) {
 
     const answerA = ansA0?.trim() || mockAnswer(a.name, mode, prompt);
     const answerB = ansB0?.trim() || mockAnswer(b.name, mode, prompt);
+
+    // Partial: answers ready
+    await publish(origin, `match:${m.id}`, { type: "answers", matchId: m.id, answers: { A: answerA, B: answerB } });
 
     const { scoreA, scoreB, winner } = judgeScores(answerA, answerB);
 
@@ -101,8 +127,15 @@ export async function POST(req: NextRequest) {
       createdAt: now,
     }).returning();
 
+    // Scores update
+    await publish(origin, `match:${m.id}`, { type: "scored", matchId: m.id, scores: { scoreA, scoreB }, winner });
+
     // Complete match
     await db.update(matches).set({ status: "completed", endedAt: Date.now() }).where(eq(matches.id, m.id));
+
+    // Final broadcast
+    await publish(origin, `match:${m.id}`, { type: "completed", matchId: m.id, roundId: r.id });
+    await publish(origin, "ticker", { type: "match_result", matchId: m.id, a: { id: a.id, name: a.name }, b: { id: b.id, name: b.name }, winner, scores: { scoreA, scoreB } });
 
     return NextResponse.json({ ok: true, data: { matchId: m.id, round: r, winner, scores: { scoreA, scoreB }, answers: { A: answerA, B: answerB } } });
   } catch (e) {

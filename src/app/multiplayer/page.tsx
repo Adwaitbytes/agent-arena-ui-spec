@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ws } from "@/lib/realtime";
 
 type Agent = { id: number; name: string };
 
@@ -26,15 +27,22 @@ export default function MultiplayerPage() {
   const [result, setResult] = useState<OrchestrateResult["data"] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Realtime state
+  const [matchId, setMatchId] = useState<number | null>(null);
+  const [answersLive, setAnswersLive] = useState<{ A?: string; B?: string }>({});
+  const [scoresLive, setScoresLive] = useState<{ scoreA?: number; scoreB?: number }>({});
+  const [winnerLive, setWinnerLive] = useState<"A" | "B" | null>(null);
+  const subsRef = useRef<Array<() => void>>([]);
+
   // Canvas animation state
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
   const [liveScores, setLiveScores] = useState({ A: 0, B: 0 });
   const targetScores = useMemo(() => ({
-    A: result?.scores.scoreA ?? 0,
-    B: result?.scores.scoreB ?? 0,
-  }), [result]);
+    A: result?.scores.scoreA ?? scoresLive.scoreA ?? 0,
+    B: result?.scores.scoreB ?? scoresLive.scoreB ?? 0,
+  }), [result, scoresLive]);
 
   // Fetch agents list
   useEffect(() => {
@@ -59,16 +67,60 @@ export default function MultiplayerPage() {
     return () => { mounted = false; };
   }, []);
 
-  // Orchestrate match
+  // Clean up any prior subscriptions
+  const clearSubs = () => {
+    subsRef.current.forEach((fn) => fn());
+    subsRef.current = [];
+  };
+
+  // Orchestrate match with realtime subscriptions
   const runMatch = async () => {
     setError(null);
     setResult(null);
+    setAnswersLive({});
+    setScoresLive({});
+    setWinnerLive(null);
+    setMatchId(null);
+    clearSubs();
+
     if (!agentA || !agentB || agentA === agentB) {
       setError("Pick two different agents.");
       return;
     }
     setLoading(true);
     setLiveScores({ A: 0, B: 0 });
+
+    // Subscribe to ticker to capture the matchId as soon as it starts
+    const aId = Number(agentA);
+    const bId = Number(agentB);
+    const unsubTicker = ws.sub("ticker", (msg: any) => {
+      if (msg?.type === "match_started" && msg?.a?.id === aId && msg?.b?.id === bId) {
+        const id = Number(msg.matchId);
+        setMatchId(id);
+        // stop listening to ticker for this run
+        unsubTicker();
+        subsRef.current = subsRef.current.filter((fn) => fn !== unsubTicker);
+        // subscribe to match channel
+        const channel = `match:${id}`;
+        const unsubMatch = ws.sub(channel, (ev: any) => {
+          if (ev?.type === "generating") {
+            setLoading(true);
+          }
+          if (ev?.type === "answers") {
+            setAnswersLive(ev.answers || {});
+          }
+          if (ev?.type === "scored") {
+            setScoresLive(ev.scores || {});
+            if (ev.winner === "A" || ev.winner === "B") setWinnerLive(ev.winner);
+          }
+          if (ev?.type === "completed") {
+            setLoading(false);
+          }
+        });
+        subsRef.current.push(unsubMatch);
+      }
+    });
+    subsRef.current.push(unsubTicker);
 
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
@@ -87,6 +139,7 @@ export default function MultiplayerPage() {
       setError(e.message || "Internal error");
     } finally {
       setLoading(false);
+      // keep subs until user starts another match; they'll auto-close on server end
     }
   };
 
@@ -108,13 +161,13 @@ export default function MultiplayerPage() {
       const dt = Math.min(32, t - (last || t));
       last = t;
 
-      // Ease live scores toward targets after result is available
+      // Ease live scores toward targets after result or live scores are available
       const targetA = targetScores.A;
       const targetB = targetScores.B;
       setLiveScores(prev => {
         const lerp = (from: number, to: number, rate: number) => from + (to - from) * rate;
-        const nextA = lerp(prev.A, targetA, result ? 0.08 : 0.02);
-        const nextB = lerp(prev.B, targetB, result ? 0.08 : 0.02);
+        const nextA = lerp(prev.A, targetA, (result || scoresLive.scoreA != null) ? 0.08 : 0.02);
+        const nextB = lerp(prev.B, targetB, (result || scoresLive.scoreB != null) ? 0.08 : 0.02);
         return { A: nextA, B: nextB };
       });
 
@@ -178,8 +231,9 @@ export default function MultiplayerPage() {
       ctx.fillStyle = "#6366f1"; ctx.fillRect(width - pad - meterW, pad, meterW * (liveScores.B / maxScore), meterH);
 
       // Winner banner
-      if (result?.winner) {
-        const text = result.winner === "A" ? "A Scores!" : "B Scores!";
+      const winnerShow = result?.winner || winnerLive;
+      if (winnerShow) {
+        const text = winnerShow === "A" ? "A Scores!" : "B Scores!";
         ctx.font = `${16 * window.devicePixelRatio}px system-ui, -apple-system, Segoe UI`;
         ctx.fillStyle = "rgba(255,255,255,0.9)";
         ctx.textAlign = "center";
@@ -196,7 +250,13 @@ export default function MultiplayerPage() {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       window.removeEventListener("resize", onResize);
     };
-  }, [result, targetScores]);
+  }, [result, targetScores, scoresLive, winnerLive]);
+
+  useEffect(() => {
+    return () => {
+      clearSubs();
+    };
+  }, []);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid gap-6">
@@ -270,20 +330,20 @@ export default function MultiplayerPage() {
               </div>
             )}
           </div>
-          {result && (
+          {(result || answersLive.A || answersLive.B) && (
             <div className="mt-4 grid gap-2 text-sm">
               <div className="flex items-center justify-between">
-                <span className="px-2 py-1 rounded bg-accent">Winner: <b>{result.winner === "A" ? "Agent A" : "Agent B"}</b></span>
-                <span className="text-muted-foreground">Match #{result.matchId}</span>
+                <span className="px-2 py-1 rounded bg-accent">Winner: <b>{(result?.winner || winnerLive) === "A" ? "Agent A" : (result?.winner || winnerLive) === "B" ? "Agent B" : "TBD"}</b></span>
+                <span className="text-muted-foreground">{matchId ? `Match #${matchId}` : result ? `Match #${result.matchId}` : "Live"}</span>
               </div>
               <div className="grid md:grid-cols-2 gap-3">
                 <div className="p-3 rounded-md border border-border">
                   <div className="text-xs mb-1 text-muted-foreground">Answer A</div>
-                  <div className="whitespace-pre-wrap">{result.answers.A}</div>
+                  <div className="whitespace-pre-wrap">{result?.answers.A ?? answersLive.A ?? "—"}</div>
                 </div>
                 <div className="p-3 rounded-md border border-border">
                   <div className="text-xs mb-1 text-muted-foreground">Answer B</div>
-                  <div className="whitespace-pre-wrap">{result.answers.B}</div>
+                  <div className="whitespace-pre-wrap">{result?.answers.B ?? answersLive.B ?? "—"}</div>
                 </div>
               </div>
             </div>

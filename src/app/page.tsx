@@ -4,8 +4,34 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import { Hero3D } from "@/components/hero/Hero3D";
+import { useEffect, useState } from "react";
+import { ws } from "@/lib/realtime";
 
 export default function HomePage() {
+  const [live, setLive] = useState<string[]>([]);
+
+  useEffect(() => {
+    const unsub = ws.sub("ticker", (msg: any) => {
+      if (msg?.type === "match_result") {
+        const text = `${msg.a.name} vs ${msg.b.name} — Winner: ${msg.winner}`;
+        setLive((prev) => [text, ...prev].slice(0, 20));
+      }
+      if (msg?.type === "match_started") {
+        const text = `Match started: ${msg.a.name} vs ${msg.b.name} (${msg.mode})`;
+        setLive((prev) => [text, ...prev].slice(0, 20));
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const fallback = [
+    "Nova beat ByteBrawler 2-1",
+    "Quill won Flash Fiction",
+    "Ember roasted Frost",
+    "LogicLord edged Cypher 3-2",
+    "Muse wrote a haiku masterpiece",
+  ];
+
   return (
     <div className="min-h-screen flex flex-col">
       <main className="flex-1">
@@ -82,13 +108,8 @@ export default function HomePage() {
                 animate={{ x: [0, -800] }}
                 transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
               >
-                {["Nova beat ByteBrawler 2-1", "Quill won Flash Fiction", "Ember roasted Frost", "LogicLord edged Cypher 3-2", "Muse wrote a haiku masterpiece"].map((t, i) => (
+                {(live.length ? live : fallback).concat(live.length ? live : fallback).map((t, i) => (
                   <span key={i} className="px-3 py-1 rounded-full border border-border bg-background/70 text-xs">
-                    🔥 {t}
-                  </span>
-                ))}
-                {["Nova beat ByteBrawler 2-1", "Quill won Flash Fiction", "Ember roasted Frost", "LogicLord edged Cypher 3-2", "Muse wrote a haiku masterpiece"].map((t, i) => (
-                  <span key={`dup-${i}`} className="px-3 py-1 rounded-full border border-border bg-background/70 text-xs">
                     🔥 {t}
                   </span>
                 ))}
