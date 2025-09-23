@@ -9,6 +9,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { useRouter } from "next/navigation";
+import { useAccount } from "@/hooks/useAccount";
+import { useNearWallet } from '@/lib/near';
 
 export default function OnboardingPage() {
   const [mode, setMode] = useState<"single" | "multi">("single");
@@ -20,6 +22,9 @@ export default function OnboardingPage() {
   const [timeLeft, setTimeLeft] = useState(60);
   const [running, setRunning] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [isPublic, setIsPublic] = useState(false);
+
+  const { accountId } = useNearWallet();
 
   useEffect(() => {
     if (!running || mode !== "multi") return;
@@ -34,7 +39,7 @@ export default function OnboardingPage() {
   }, [timeLeft]);
 
   const canAdd = useMemo(() => mode === "multi" && prompts.length < 5, [mode, prompts.length]);
-  const isValid = useMemo(() => agentName.trim().length > 0 && prompts[0]?.trim().length > 0, [agentName, prompts]);
+  const isValid = agentName.trim().length > 0 && prompts[0].trim().length > 0;
 
   const startTimer = () => {
     setTimeLeft(60);
@@ -46,25 +51,25 @@ export default function OnboardingPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
+      if (!accountId) {
+        setError('Please connect your NEAR wallet first');
+        return;
+      }
       const res = await fetch("/api/agents", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          userId: accountId,
           name: agentName.trim(),
-          promptProfile: prompts[0].trim(),
-          memorySnippets: prompts.slice(1).map((p) => p).filter((p) => p.trim().length > 0),
+          prompt: prompts[0].trim(),
+          isPublic,
         }),
       });
       const json = await res.json();
       if (!res.ok || !json?.ok) {
         throw new Error(json?.error || `Failed with status ${res.status}`);
       }
-      // Navigate to agents list for now (profile page not yet implemented)
-      router.push("/agent?created=1");
+      router.push("/arena?created=1");
     } catch (e: any) {
       setError(e?.message || "Failed to create agent");
     } finally {
@@ -81,7 +86,7 @@ export default function OnboardingPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Prompt Type</CardTitle>
+          <CardTitle>Agent Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
@@ -94,87 +99,35 @@ export default function OnboardingPage() {
             />
           </div>
 
-          <RadioGroup value={mode} onValueChange={(v) => setMode(v as any)} className="grid sm:grid-cols-2 gap-3">
-            <Label htmlFor="single" className="border rounded-md p-4 cursor-pointer hover:bg-secondary">
-              <div className="flex items-start gap-3">
-                <RadioGroupItem id="single" value="single" />
-                <div>
-                  <div className="font-semibold">Single Prompt</div>
-                  <div className="text-sm text-muted-foreground">One core prompt defines your agent.</div>
-                </div>
-              </div>
-            </Label>
-            <Label htmlFor="multi" className="border rounded-md p-4 cursor-pointer hover:bg-secondary">
-              <div className="flex items-start gap-3">
-                <RadioGroupItem id="multi" value="multi" />
-                <div>
-                  <div className="font-semibold">Multi-Refine (up to 5)</div>
-                  <div className="text-sm text-muted-foreground">Refine your agent in timed steps.</div>
-                </div>
-              </div>
-            </Label>
-          </RadioGroup>
-
-          {mode === "multi" && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">Time left</div>
-                <div className={`text-sm font-medium ${timeLeft <= 10 ? "text-destructive" : ""}`}>{timeLeft}s</div>
-              </div>
-              <Progress value={((60 - timeLeft) / 60) * 100} />
-              <div className="flex gap-2">
-                <Button onClick={startTimer} disabled={running}>Start</Button>
-                <Button variant="secondary" onClick={() => setRunning(false)} disabled={!running}>Pause</Button>
-                <Button variant="ghost" onClick={() => { setRunning(false); setTimeLeft(60); }}>Reset</Button>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-3">
-            {prompts.map((p, idx) => (
-              <div key={idx} className="space-y-2">
-                <Label htmlFor={`prompt-${idx}`}>Prompt {idx + 1}</Label>
-                <Textarea
-                  id={`prompt-${idx}`}
-                  value={p}
-                  onChange={(e) => setPrompts((arr) => arr.map((v, i) => (i === idx ? e.target.value : v)))}
-                  placeholder={idx === 0 ? "e.g., You are Nova, a witty, sharp-tongued but fair AI with a love for clever wordplay." : "Refinement detail..."}
-                  rows={idx === 0 ? 3 : 2}
-                />
-                {idx > 0 && (
-                  <Button variant="ghost" size="sm" onClick={() => setPrompts((arr) => arr.filter((_, i) => i !== idx))}>Remove</Button>
-                )}
-              </div>
-            ))}
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => setPrompts((arr) => [...arr, ""])}
-                disabled={!canAdd}
-              >
-                Add refinement
-              </Button>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="prompt">Agent Prompt (Personality & Instructions)</Label>
+            <Textarea
+              id="prompt"
+              value={prompts[0]}
+              onChange={(e) => setPrompts([e.target.value])}
+              placeholder="e.g., You are Nova, a witty AI with a sharp tongue but fair judgment. Respond creatively and cleverly."
+              rows={4}
+            />
           </div>
 
-          <div className="grid sm:grid-cols-3 gap-3 pt-2">
-            {["Witty Roaster", "Poetic Muse", "Logic Duelist"].map((p) => (
-              <div key={p} className="p-3 rounded-md border">
-                <div className="font-medium">{p}</div>
-                <div className="text-xs text-muted-foreground mt-1">Tap to use as a starting point.</div>
-                <Button className="mt-2" variant="ghost" size="sm" onClick={() => setPrompts([`Preset: ${p} — describe style, strengths, weaknesses.`])}>Use preset</Button>
-              </div>
-            ))}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={isPublic}
+                onChange={(e) => setIsPublic(e.target.checked)}
+                className="rounded"
+              />
+              Make Public (Others can battle your agent in browse)
+            </Label>
           </div>
 
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
         <CardFooter className="flex justify-between">
           <Button asChild variant="ghost"><Link href="/">Back</Link></Button>
           <Button onClick={handleSubmit} disabled={!isValid || submitting}>
-            {submitting ? "Saving..." : "Save Agent"}
+            {submitting ? "Saving..." : "Create Agent"}
           </Button>
         </CardFooter>
       </Card>
