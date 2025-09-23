@@ -1,181 +1,112 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { db } from "@/db";
 import { agents, matches, matchPlayers, rounds } from "@/db/schema";
-import { eq, inArray } from "drizzle-orm";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { eq } from "drizzle-orm";
 
-const orchestrateSchema = z.object({
-  mode: z.enum(["boxing", "cricket", "carrom"]).default("boxing"),
-  agentAId: z.number().int().positive(),
-  agentBId: z.number().int().positive().refine((v, ctx) => {
-    const { agentAId } = (ctx as any).parent || {};
-    return typeof agentAId !== "number" || v !== agentAId;
-  }, { message: "agentBId must be different from agentAId" }),
-  prompt: z.string().min(1).max(2000),
-});
-
-async function maybeUploadToIPFS(filename: string, data: any): Promise<string | null> {
-  try {
-    const token = process.env.WEB3_STORAGE_TOKEN;
-    if (!token) return null;
-    const { Web3Storage, File } = await import("web3.storage");
-    const client = new Web3Storage({ token });
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const file = new File([blob], filename, { type: "application/json" });
-    const cid = await client.put([file], { name: filename, wrapWithDirectory: false });
-    return cid;
-  } catch (e) {
-    console.error("IPFS upload failed:", e);
-    return null;
-  }
-}
-
-async function callGeminiAnswers(prompt: string, aProfile: string, bProfile: string) {
+// Helper: safe dynamic Gemini
+async function generateWithGemini(prompt: string) {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) return null;
   try {
+    // @ts-ignore - dynamic import for optional dep
+    const { GoogleGenerativeAI } = await import("@google/generative-ai");
+    const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-1.5-flash" });
-
-    const buildPrompt = (role: "A" | "B", profile: string) => `You are Agent ${role} in a head-to-head creative duel.\n` +
-      `Your persona/profile:\n${profile}\n\n` +
-      `Challenge: ${prompt}\n` +
-      `Respond with a short, punchy answer (3-6 sentences). Avoid meta talk. No preamble. Just your answer.`;
-
-    const [aRes, bRes] = await Promise.all([
-      model.generateContent(buildPrompt("A", aProfile)),
-      model.generateContent(buildPrompt("B", bProfile)),
-    ]);
-
-    const aText = aRes.response.text().trim();
-    const bText = bRes.response.text().trim();
-    return { engine: "gemini", answers: { a: aText, b: bText } } as const;
-  } catch (err) {
-    console.error("Gemini generation failed:", err);
+    const model = genAI.getGenerativeModel({ model: modelName });
+    const res = await model.generateContent(prompt);
+    const out = res.response?.text?.() ?? (typeof res.response === "object" ? (res.response as any).text?.() : "");
+    return (await out) || "";
+  } catch (e) {
+    console.error("Gemini generation failed, falling back to mock:", e);
     return null;
   }
 }
 
-async function callOpenServe(prompt: string, aProfile: string, bProfile: string) {
-  // Minimal stub: if OPENSERV_API_KEY exists and OPENSERV_API_BASE provided, you could call real API here.
-  // To avoid external failures, return a deterministic mock transcript for now.
-  const seed = (s: string) => Array.from(s).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  const sa = seed(aProfile + prompt) % 100;
-  const sb = seed(bProfile + prompt) % 100;
-  const aAnswer = `Agent A riff (${sa}): ${prompt}\nResponse showcasing creativity, structure, and flair.`;
-  const bAnswer = `Agent B riff (${sb}): ${prompt}\nResponse emphasizing logic, humor, and style.`;
-  return {
-    engine: process.env.OPENSERV_API_KEY ? "mock-openserve" : "mock-local",
-    answers: {
-      a: aAnswer,
-      b: bAnswer,
-    },
-  } as const;
+function mockAnswer(name: string, mode: string, q: string) {
+  const templates = [
+    `${name}: Here\'s my take on "${q}" — sharp, concise, and to the point in ${mode} mode!`,
+    `${name}: I\'ll counter with a witty angle: "${q}" deserves this punchy reply.`,
+    `${name}: Deploying creative strike → ${q} :: Verdict: style over force.`,
+  ];
+  return templates[Math.floor(Math.random() * templates.length)];
 }
 
-function judge(aText: string, bText: string) {
-  // Simple judge: score by length variety and characters diversity
-  const diversity = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9]/g, "").split("")).size;
-  const creativityA = Math.min(10, Math.round(diversity(aText) / 5));
-  const creativityB = Math.min(10, Math.round(diversity(bText) / 5));
-  const styleA = Math.min(10, Math.round((aText.match(/[,.!?]/g)?.length || 0) / 3));
-  const styleB = Math.min(10, Math.round((bText.match(/[,.!?]/g)?.length || 0) / 3));
-  const totalA = creativityA + styleA;
-  const totalB = creativityB + styleB;
-  const winner = totalA === totalB ? (aText.length >= bText.length ? "A" : "B") : (totalA > totalB ? "A" : "B");
-  return {
-    scores: {
-      creativity: { A: creativityA, B: creativityB },
-      style: { A: styleA, B: styleB },
-      total: { A: totalA, B: totalB },
-    },
-    winner,
-    summary: winner === "A" ? "Agent A edged out with more expressive variety." : "Agent B prevailed with tighter phrasing and punctuation cadence.",
-  } as const;
+function judgeScores(a: string, b: string) {
+  // lightweight heuristic judging
+  const lenA = a.trim().length;
+  const lenB = b.trim().length;
+  const styleA = (a.match(/[!?.]/g) || []).length;
+  const styleB = (b.match(/[!?.]/g) || []).length;
+  const scoreA = Math.round(lenA * 0.02 + styleA * 2 + (a.toLowerCase().includes("therefore") ? 3 : 0));
+  const scoreB = Math.round(lenB * 0.02 + styleB * 2 + (b.toLowerCase().includes("thus") ? 3 : 0));
+  const winner = scoreA === scoreB ? (Math.random() > 0.5 ? "A" : "B") : scoreA > scoreB ? "A" : "B";
+  return { scoreA, scoreB, winner } as const;
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const parsed = orchestrateSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
-    }
-    const { mode, agentAId, agentBId, prompt } = parsed.data;
+    const { agentAId, agentBId, prompt, mode = "duel" } = body || {};
 
-    // Ensure agents exist
-    const existingAgents = await db.select().from(agents).where(inArray(agents.id, [agentAId, agentBId]));
-    if (existingAgents.length !== 2) {
-      return NextResponse.json({ ok: false, error: "One or more agents not found" }, { status: 404 });
+    if (!agentAId || !agentBId || !prompt) {
+      return NextResponse.json({ ok: false, error: "agentAId, agentBId, prompt are required" }, { status: 400 });
     }
-    const agentA = existingAgents.find(a => a.id === agentAId)!;
-    const agentB = existingAgents.find(a => a.id === agentBId)!;
+    if (agentAId === agentBId) {
+      return NextResponse.json({ ok: false, error: "Pick two different agents" }, { status: 400 });
+    }
 
-    // Create match (start immediately)
-    const [match] = await db.insert(matches).values({
+    // Load agents
+    const [a] = await db.select().from(agents).where(eq(agents.id, agentAId));
+    const [b] = await db.select().from(agents).where(eq(agents.id, agentBId));
+    if (!a || !b) return NextResponse.json({ ok: false, error: "Agents not found" }, { status: 404 });
+
+    // Create match
+    const now = Date.now();
+    const [m] = await db.insert(matches).values({
       mode,
       status: "in_progress",
-      startedAt: Date.now(),
-      endedAt: null,
-      vrfProof: null,
-      intentsTx: null,
-      shadeAgentId: null,
-      createdAt: Date.now(),
+      startedAt: now,
+      createdAt: now,
     }).returning();
 
-    // Seat players
     await db.insert(matchPlayers).values([
-      { matchId: match.id, agentId: agentAId, userId: agentA.ownerUserId || null, seat: 0, createdAt: Date.now() },
-      { matchId: match.id, agentId: agentBId, userId: agentB.ownerUserId || null, seat: 1, createdAt: Date.now() },
+      { matchId: m.id, agentId: a.id, userId: a.ownerUserId ?? null, seat: 0, createdAt: now },
+      { matchId: m.id, agentId: b.id, userId: b.ownerUserId ?? null, seat: 1, createdAt: now },
     ]);
 
-    // Generate answers: try Gemini first; if unavailable, fall back to OpenServe mock
-    const gem = await callGeminiAnswers(prompt, agentA.promptProfile, agentB.promptProfile);
-    const os = gem ?? await callOpenServe(prompt, agentA.promptProfile, agentB.promptProfile);
+    // Generate answers (Gemini → fallback mock)
+    const sysA = `Agent A (${a.name}) profile: ${a.promptProfile}\nMode: ${mode}\nQuestion: ${prompt}\nAnswer as A:`;
+    const sysB = `Agent B (${b.name}) profile: ${b.promptProfile}\nMode: ${mode}\nQuestion: ${prompt}\nAnswer as B:`;
 
-    // Judge
-    const verdict = judge(os.answers.a, os.answers.b);
+    const [ansA0, ansB0] = await Promise.all([
+      generateWithGemini(sysA),
+      generateWithGemini(sysB),
+    ]);
 
-    // Build transcript
-    const transcript = {
-      matchId: match.id,
-      mode,
-      prompt,
-      agents: {
-        A: { id: agentAId, name: agentA.name },
-        B: { id: agentBId, name: agentB.name },
-      },
-      engine: os.engine,
-      round: 0,
-      answers: { A: os.answers.a, B: os.answers.b },
-      judge: verdict,
-      timestamps: { createdAt: Date.now() },
-    };
+    const answerA = ansA0?.trim() || mockAnswer(a.name, mode, prompt);
+    const answerB = ansB0?.trim() || mockAnswer(b.name, mode, prompt);
 
-    // Upload to IPFS when available
-    const cid = await maybeUploadToIPFS(`match-${match.id}-round-0.json`, transcript);
+    const { scoreA, scoreB, winner } = judgeScores(answerA, answerB);
 
-    // Persist round
-    const [round] = await db.insert(rounds).values({
-      matchId: match.id,
+    // Persist round with answers directly
+    const [r] = await db.insert(rounds).values({
+      matchId: m.id,
       idx: 0,
       question: prompt,
-      ipfsCid: cid,
-      judgeScores: verdict.scores as any,
-      resultSummary: `${verdict.winner === "A" ? agentA.name : agentB.name} wins — ${verdict.summary}`,
-      createdAt: Date.now(),
+      ipfsCid: null,
+      judgeScores: { scoreA, scoreB, winner } as any,
+      resultSummary: `Winner: ${winner}`,
+      answerA,
+      answerB,
+      createdAt: now,
     }).returning();
 
     // Complete match
-    await db.update(matches).set({ status: "completed", endedAt: Date.now() }).where(eq(matches.id, match.id));
+    await db.update(matches).set({ status: "completed", endedAt: Date.now() }).where(eq(matches.id, m.id));
 
-    // Include answers in the returned round payload for immediate UI display
-    const roundWithAnswers = { ...round, answers: { A: os.answers.a, B: os.answers.b } } as any;
-
-    return NextResponse.json({ ok: true, data: { matchId: match.id, round: roundWithAnswers, cid, winner: verdict.winner } }, { status: 201 });
+    return NextResponse.json({ ok: true, data: { matchId: m.id, round: r, winner, scores: { scoreA, scoreB }, answers: { A: answerA, B: answerB } } });
   } catch (e) {
-    console.error("POST /api/match/orchestrate error:", e);
+    console.error("/api/match/orchestrate POST error:", e);
     return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
   }
 }

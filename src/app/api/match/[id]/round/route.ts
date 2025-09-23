@@ -12,6 +12,8 @@ const createRoundSchema = z.object({
   ipfsCid: z.string().max(128).optional(),
   judgeScores: z.object({}).optional(),
   resultSummary: z.string().optional(),
+  answerA: z.string().optional(),
+  answerB: z.string().optional(),
 });
 
 export async function POST(
@@ -46,7 +48,7 @@ export async function POST(
       );
     }
 
-    const { idx, question, ipfsCid, judgeScores, resultSummary, answers } = validation.data as any;
+    const { idx, question, ipfsCid, judgeScores, resultSummary, answers, answerA, answerB } = validation.data as any;
 
     // Optionally pin round payload to IPFS via Pinata when configured and no CID provided
     let ipfsCidToUse: string | null = ipfsCid || null;
@@ -58,6 +60,8 @@ export async function POST(
           mode: match.mode,
           question,
           answers: answers ?? null,
+          answerA: answerA ?? null,
+          answerB: answerB ?? null,
           judge: judgeScores ? { scores: judgeScores, rationale: null, flags: null } : null,
           timestamps: { createdAt: Date.now() },
         };
@@ -75,6 +79,8 @@ export async function POST(
       ipfsCid: ipfsCidToUse,
       judgeScores: judgeScores || null,
       resultSummary: resultSummary || null,
+      answerA: answerA || null,
+      answerB: answerB || null,
       createdAt: Date.now(),
     }).returning();
 

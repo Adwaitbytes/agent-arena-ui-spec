@@ -1,68 +1,70 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { motion } from "framer-motion";
 
-interface Agent {
-  id: number;
-  name: string;
-  promptProfile: string;
-}
+type Agent = { id: number; name: string };
 
-interface OrchestrateResponse {
+type OrchestrateResult = {
   ok: boolean;
   data?: {
     matchId: number;
     round: any;
-    cid: string | null;
     winner: "A" | "B";
+    scores: { scoreA: number; scoreB: number };
+    answers: { A: string; B: string };
   };
-  error?: string | { fieldErrors?: Record<string, string[]> } | any;
-}
+  error?: string;
+};
 
 export default function MultiplayerPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [loadingAgents, setLoadingAgents] = useState(true);
-  const [mode, setMode] = useState<"boxing" | "cricket" | "carrom">("boxing");
-  const [agentAId, setAgentAId] = useState<number | "">("");
-  const [agentBId, setAgentBId] = useState<number | "">("");
-  const [prompt, setPrompt] = useState("Write a 2-line roast about pineapple pizza.");
-  const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<OrchestrateResponse["data"] | null>(null);
+  const [agentA, setAgentA] = useState<number | "">("");
+  const [agentB, setAgentB] = useState<number | "">("");
+  const [prompt, setPrompt] = useState("Give a witty one-liner about space travel.");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<OrchestrateResult["data"] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Canvas animation state
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
+  const [liveScores, setLiveScores] = useState({ A: 0, B: 0 });
+  const targetScores = useMemo(() => ({
+    A: result?.scores.scoreA ?? 0,
+    B: result?.scores.scoreB ?? 0,
+  }), [result]);
+
+  // Fetch agents list
   useEffect(() => {
+    let mounted = true;
     const fetchAgents = async () => {
       try {
-        setLoadingAgents(true);
-        const res = await fetch(`/api/agents?page=1&pageSize=100`, {
-          headers: { "Content-Type": "application/json" },
-          cache: "no-store",
-        });
+        const res = await fetch("/api/agents");
         const json = await res.json();
-        if (json?.ok) {
-          setAgents(json.data.agents || []);
-        } else {
-          setError(json?.error || "Failed to load agents");
-        }
-      } catch (e: any) {
-        setError(e?.message || "Failed to load agents");
-      } finally {
-        setLoadingAgents(false);
+        if (!mounted) return;
+        const list: Agent[] = (json?.data || json) as any;
+        setAgents(list.map((a: any) => ({ id: a.id, name: a.name })));
+      } catch (e) {
+        // ignore
       }
     };
     fetchAgents();
+    return () => { mounted = false; };
   }, []);
 
-  const agentA = useMemo(() => agents.find(a => a.id === agentAId), [agents, agentAId]);
-  const agentB = useMemo(() => agents.find(a => a.id === agentBId), [agents, agentBId]);
-
-  const handleRunMatch = async () => {
-    setSubmitting(true);
+  // Orchestrate match
+  const runMatch = async () => {
     setError(null);
     setResult(null);
+    if (!agentA || !agentB || agentA === agentB) {
+      setError("Pick two different agents.");
+      return;
+    }
+    setLoading(true);
+    setLiveScores({ A: 0, B: 0 });
+
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
       const res = await fetch("/api/match/orchestrate", {
@@ -71,208 +73,213 @@ export default function MultiplayerPage() {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          mode,
-          agentAId: Number(agentAId),
-          agentBId: Number(agentBId),
-          prompt: prompt.trim(),
-        }),
+        body: JSON.stringify({ agentAId: Number(agentA), agentBId: Number(agentB), prompt, mode: "duel" }),
       });
-      const json: OrchestrateResponse = await res.json();
-      if (!json.ok) {
-        const err = typeof json.error === "string" ? json.error : "Failed to orchestrate match";
-        setError(err);
-      } else {
-        setResult(json.data!);
-      }
+      const json: OrchestrateResult = await res.json();
+      if (!json.ok) throw new Error(json.error || "Failed to run match");
+      setResult(json.data!);
     } catch (e: any) {
-      setError(e?.message || "Something went wrong");
+      setError(e.message || "Internal error");
     } finally {
-      setSubmitting(false);
+      setLoading(false);
     }
   };
 
-  const canSubmit = !!agentAId && !!agentBId && agentAId !== agentBId && prompt.trim().length > 0 && !submitting;
+  // Arena Canvas drawing
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let last = 0;
+    const w = () => (canvas.width = canvas.clientWidth * window.devicePixelRatio);
+    const h = () => (canvas.height = canvas.clientHeight * window.devicePixelRatio);
+    w(); h();
+
+    const draw = (t: number) => {
+      if (!ctx) return;
+      if (!startTimeRef.current) startTimeRef.current = t;
+      const dt = Math.min(32, t - (last || t));
+      last = t;
+
+      // Ease live scores toward targets after result is available
+      const targetA = targetScores.A;
+      const targetB = targetScores.B;
+      setLiveScores(prev => {
+        const lerp = (from: number, to: number, rate: number) => from + (to - from) * rate;
+        const nextA = lerp(prev.A, targetA, result ? 0.08 : 0.02);
+        const nextB = lerp(prev.B, targetB, result ? 0.08 : 0.02);
+        return { A: nextA, B: nextB };
+      });
+
+      // Clear
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Background grid
+      const width = canvas.width, height = canvas.height;
+      ctx.fillStyle = "rgba(0,0,0,0)";
+      const grid = 20 * window.devicePixelRatio;
+      ctx.strokeStyle = "rgba(127,127,127,0.15)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x < width; x += grid) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+      }
+      for (let y = 0; y < height; y += grid) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+      }
+
+      // Center line
+      ctx.strokeStyle = "rgba(127,127,127,0.3)";
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath(); ctx.moveTo(width/2, 0); ctx.lineTo(width/2, height); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Animated orbs for each agent
+      const tSec = t / 1000;
+      const orbY = (p: number) => height*0.5 + Math.sin(tSec * 2 + p) * height*0.15;
+      const orbX_A = width*0.25 + Math.sin(tSec * 1.5) * width*0.05;
+      const orbX_B = width*0.75 + Math.cos(tSec * 1.5) * width*0.05;
+
+      // Glows
+      const drawGlow = (x: number, y: number, color: string) => {
+        const r = 28 * window.devicePixelRatio;
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, r*2);
+        grad.addColorStop(0, color);
+        grad.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = grad;
+        ctx.beginPath(); ctx.arc(x, y, r*2, 0, Math.PI*2); ctx.fill();
+      };
+      drawGlow(orbX_A, orbY(0), "rgba(72,199,142,0.35)"); // chart-4-ish
+      drawGlow(orbX_B, orbY(1), "rgba(103,132,255,0.35)"); // chart-3-ish
+
+      // Orbs
+      ctx.fillStyle = "#22c55e"; // A
+      ctx.beginPath(); ctx.arc(orbX_A, orbY(0), 10*window.devicePixelRatio, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#6366f1"; // B
+      ctx.beginPath(); ctx.arc(orbX_B, orbY(1), 10*window.devicePixelRatio, 0, Math.PI*2); ctx.fill();
+
+      // Score meters at top
+      const maxScore = Math.max(10, targetA, targetB);
+      const meterW = width * 0.4;
+      const meterH = 12 * window.devicePixelRatio;
+      const pad = 12 * window.devicePixelRatio;
+
+      // A meter (left)
+      ctx.fillStyle = "rgba(34,197,94,0.15)"; ctx.fillRect(pad, pad, meterW, meterH);
+      ctx.fillStyle = "#22c55e"; ctx.fillRect(pad, pad, meterW * (liveScores.A / maxScore), meterH);
+      // B meter (right)
+      ctx.fillStyle = "rgba(99,102,241,0.15)"; ctx.fillRect(width - pad - meterW, pad, meterW, meterH);
+      ctx.fillStyle = "#6366f1"; ctx.fillRect(width - pad - meterW, pad, meterW * (liveScores.B / maxScore), meterH);
+
+      // Winner banner
+      if (result?.winner) {
+        const text = result.winner === "A" ? "A Scores!" : "B Scores!";
+        ctx.font = `${16 * window.devicePixelRatio}px system-ui, -apple-system, Segoe UI`;
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        ctx.textAlign = "center";
+        ctx.fillText(text, width/2, pad + meterH + 20 * window.devicePixelRatio);
+      }
+
+      rafRef.current = requestAnimationFrame(draw);
+    };
+
+    rafRef.current = requestAnimationFrame(draw);
+    const onResize = () => { w(); h(); };
+    window.addEventListener("resize", onResize);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [result, targetScores]);
 
   return (
-    <div className="min-h-[calc(100vh-4rem)]">
-      <section className="py-10 sm:py-14 border-b border-border bg-secondary/40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">Multiplayer Test Match</h1>
-          <p className="mt-2 text-muted-foreground">Pick two agents, provide a prompt, and run an orchestrated round. The transcript is stored to IPFS when configured.</p>
-        </div>
-      </section>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid gap-6">
+      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Multiplayer Arena</h1>
 
-      <section className="py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Setup</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4">
-              <div className="grid sm:grid-cols-3 gap-3">
-                <div className="grid gap-1.5">
-                  <label className="text-sm text-muted-foreground">Mode</label>
-                  <select
-                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                    value={mode}
-                    onChange={(e) => setMode(e.target.value as any)}
-                  >
-                    <option value="boxing">Boxing</option>
-                    <option value="cricket">Cricket</option>
-                    <option value="carrom">Carrom</option>
-                  </select>
-                </div>
-                <div className="grid gap-1.5">
-                  <label className="text-sm text-muted-foreground">Agent A</label>
-                  <select
-                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                    disabled={loadingAgents}
-                    value={agentAId}
-                    onChange={(e) => setAgentAId(e.target.value ? Number(e.target.value) : "")}
-                  >
-                    <option value="">{loadingAgents ? "Loading..." : "Select agent"}</option>
-                    {agents.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid gap-1.5">
-                  <label className="text-sm text-muted-foreground">Agent B</label>
-                  <select
-                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                    disabled={loadingAgents}
-                    value={agentBId}
-                    onChange={(e) => setAgentBId(e.target.value ? Number(e.target.value) : "")}
-                  >
-                    <option value="">{loadingAgents ? "Loading..." : "Select agent"}</option>
-                    {agents.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid gap-1.5">
-                <label className="text-sm text-muted-foreground">Prompt</label>
-                <textarea
-                  className="min-h-24 rounded-md border border-border bg-background px-3 py-2 text-sm"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                />
-              </div>
-
-              {error && (
-                <div className="text-sm text-destructive">{error}</div>
-              )}
-
-              <div className="flex items-center gap-3">
-                <Button onClick={handleRunMatch} disabled={!canSubmit}>
-                  {submitting ? "Running..." : "Run Match"}
-                </Button>
-                <Button asChild variant="secondary">
-                  <Link href="/onboarding">Create Agent</Link>
-                </Button>
-              </div>
-
-              {submitting && (
-                <div className="mt-2">
-                  <div className="text-xs text-muted-foreground mb-1">Live</div>
-                  <div className="relative h-2 overflow-hidden rounded bg-secondary">
-                    <motion.div
-                      className="absolute inset-y-0 left-0 w-1/3 bg-primary"
-                      initial={{ x: "-100%" }}
-                      animate={{ x: ["-100%", "120%"] }}
-                      transition={{ duration: 1.2, ease: "easeInOut", repeat: Infinity }}
-                    />
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Outcome</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 text-sm">
-              {!result && !submitting && <p className="text-muted-foreground">No result yet.</p>}
-              {!result && submitting && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <motion.div className="size-2 rounded-full bg-primary" animate={{ scale: [1, 1.3, 1] }} transition={{ duration: 0.6, repeat: Infinity }} />
-                  <span>Agents are answering...</span>
-                </div>
-              )}
-              {result && (
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Match ID</span>
-                    <Link className="underline" href={`/match/${result.matchId}`}>#{result.matchId}</Link>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Winner</span>
-                    <motion.span
-                      className="font-semibold px-2 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-                      initial={{ scale: 0.9, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ type: "spring", stiffness: 260, damping: 18 }}
-                    >
-                      {result.winner === "A" ? agentA?.name || "A" : agentB?.name || "B"}
-                    </motion.span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">IPFS CID</span>
-                    <span className="font-mono text-xs">{result.cid || "—"}</span>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
-      {result && (
-        <section className="pb-12">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <Card>
-              <CardHeader>
-                <CardTitle>Round 1 Transcript</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-6">
-                <div>
-                  <div className="text-xs uppercase text-muted-foreground mb-1">Prompt</div>
-                  <div className="text-sm whitespace-pre-wrap border border-border rounded-md p-3 bg-secondary/40">{prompt}</div>
-                </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <div className="text-xs uppercase text-muted-foreground">{agentA?.name || "Agent A"}</div>
-                    <pre className="text-sm whitespace-pre-wrap border border-border rounded-md p-3 bg-background/60 overflow-x-auto">{(result as any).round?.answers?.A || "(Answer captured in replay)"}</pre>
-                  </div>
-                  <div className="grid gap-2">
-                    <div className="text-xs uppercase text-muted-foreground">{agentB?.name || "Agent B"}</div>
-                    <pre className="text-sm whitespace-pre-wrap border border-border rounded-md p-3 bg-background/60 overflow-x-auto">{(result as any).round?.answers?.B || "(Answer captured in replay)"}</pre>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button asChild>
-                    <Link href={`/match/${result.matchId}`}>View Full Replay</Link>
-                  </Button>
-                  <Button asChild variant="secondary">
-                    <Link href={`/agent/${agentA?.id ?? 0}`}>{agentA?.name || "Agent A"}</Link>
-                  </Button>
-                  <Button asChild variant="secondary">
-                    <Link href={`/agent/${agentB?.id ?? 0}`}>{agentB?.name || "Agent B"}</Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Setup</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <div className="grid sm:grid-cols-2 gap-3">
+            <label className="grid gap-1 text-sm">
+              <span className="text-muted-foreground">Agent A</span>
+              <select
+                className="h-10 rounded-md border border-border bg-background px-3"
+                value={agentA}
+                onChange={(e) => setAgentA(e.target.value ? Number(e.target.value) : "")}
+              >
+                <option value="">Select agent…</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span className="text-muted-foreground">Agent B</span>
+              <select
+                className="h-10 rounded-md border border-border bg-background px-3"
+                value={agentB}
+                onChange={(e) => setAgentB(e.target.value ? Number(e.target.value) : "")}
+              >
+                <option value="">Select agent…</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </label>
           </div>
-        </section>
-      )}
+
+          <label className="grid gap-1 text-sm">
+            <span className="text-muted-foreground">Prompt</span>
+            <textarea
+              className="min-h-24 rounded-md border border-border bg-background px-3 py-2"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+            />
+          </label>
+
+          <div className="flex items-center gap-3">
+            <Button onClick={runMatch} disabled={loading || !agentA || !agentB}>Run Match</Button>
+            {error && <span className="text-destructive text-sm">{error}</span>}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Arena</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="relative w-full aspect-[16/9] rounded-lg border border-border overflow-hidden bg-secondary">
+            <canvas ref={canvasRef} className="w-full h-full" />
+            {loading && (
+              <div className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">
+                <div className="animate-pulse">Agents are answering…</div>
+              </div>
+            )}
+          </div>
+          {result && (
+            <div className="mt-4 grid gap-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-1 rounded bg-accent">Winner: <b>{result.winner === "A" ? "Agent A" : "Agent B"}</b></span>
+                <span className="text-muted-foreground">Match #{result.matchId}</span>
+              </div>
+              <div className="grid md:grid-cols-2 gap-3">
+                <div className="p-3 rounded-md border border-border">
+                  <div className="text-xs mb-1 text-muted-foreground">Answer A</div>
+                  <div className="whitespace-pre-wrap">{result.answers.A}</div>
+                </div>
+                <div className="p-3 rounded-md border border-border">
+                  <div className="text-xs mb-1 text-muted-foreground">Answer B</div>
+                  <div className="whitespace-pre-wrap">{result.answers.B}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

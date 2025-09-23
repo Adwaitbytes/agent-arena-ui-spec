@@ -39,6 +39,8 @@ export const rounds = sqliteTable('rounds', {
   ipfsCid: text('ipfs_cid', { length: 128 }),
   judgeScores: text('judge_scores', { mode: 'json' }),
   resultSummary: text('result_summary'),
+  answerA: text('answer_a'),
+  answerB: text('answer_b'),
   createdAt: integer('created_at').notNull(),
 });
 
