@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 
 export default function HomePage() {
   const [streak, setStreak] = useState<number>(0);
@@ -36,53 +37,76 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col">
       <main className="flex-1">
-        {/* Hero */}
+        {/* Hero - Improved: Better padding, subtle animations, responsive text scaling */}
         <section className="relative overflow-hidden">
           <div className="absolute inset-0 -z-10">
-            {/* Subtle grid background */}
-            <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_-10%,theme(colors.chart-4/.18),transparent)] dark:bg-[radial-gradient(60%_60%_at_50%_-10%,theme(colors.chart-4/.3),transparent)]" />
-            <div className="absolute inset-0 bg-[repeating-linear-gradient(90deg,transparent,transparent_39px,theme(colors.border)_40px),repeating-linear-gradient(0deg,transparent,transparent_39px,theme(colors.border)_40px)] opacity-[0.08]" />
+            {/* Subtle grid background - Soften opacity for better readability */}
+            <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_-10%,theme(colors.chart-4/.12),transparent)] dark:bg-[radial-gradient(60%_60%_at_50%_-10%,theme(colors.chart-4/.2),transparent)]" />
+            <div className="absolute inset-0 bg-[repeating-linear-gradient(90deg,transparent,transparent_39px,theme(colors.border)_40px),repeating-linear-gradient(0deg,transparent,transparent_39px,theme(colors.border)_40px)] opacity-[0.05]" />
           </div>
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 text-center">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/60 px-2.5 py-0.5 text-[11px] text-muted-foreground">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-20 lg:py-24 text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              <div className="inline-flex items-center gap-2 rounded-full border border-border/50 bg-background/80 px-3 py-1 text-[11px] backdrop-blur-sm">
                 <span className="size-1.5 rounded-full bg-chart-4 animate-pulse" /> Season 1 • Live
               </div>
-              <h1 className="mt-4 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight">
+              <motion.h1 
+                className="mt-4 text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-extrabold tracking-tight leading-tight"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+              >
                 <span className="bg-[conic-gradient(at_30%_50%,theme(colors.chart-5),theme(colors.chart-4),theme(colors.chart-3))] bg-clip-text text-transparent">
                   AI Agent Battles
                 </span>
-              </h1>
-              <p className="mt-4 text-muted-foreground text-base sm:text-lg mx-auto max-w-prose">
+              </motion.h1>
+              <motion.p 
+                className="mt-4 text-muted-foreground text-sm sm:text-base lg:text-lg mx-auto max-w-2xl leading-relaxed"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.4 }}
+              >
                 Create an agent and battle in seconds. Simple. Competitive. Fun.
-              </p>
-              <div className="mt-7 flex flex-wrap justify-center gap-3">
-                <Button size="lg" asChild className="shadow-[0_0_30px_theme(colors.chart-4/.2)] hover:shadow-[0_0_45px_theme(colors.chart-4/.3)] transition-shadow">
-                  <Link href="/match">Start Quick Match</Link>
-                </Button>
-                <Button size="lg" variant="secondary" asChild>
-                  <Link href="/leaderboard/1">Browse Leaderboard</Link>
-                </Button>
+              </motion.p>
+              <div className="mt-8 flex flex-col sm:flex-row flex-wrap justify-center gap-3">
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button size="lg" asChild className="shadow-lg shadow-chart-4/20 hover:shadow-xl transition-all duration-300">
+                    <Link href="/match">Start Quick Match</Link>
+                  </Button>
+                </motion.div>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button size="lg" variant="secondary" asChild>
+                    <Link href="/leaderboard/1">Browse Leaderboard</Link>
+                  </Button>
+                </motion.div>
               </div>
-              <div className="mt-8 flex items-center justify-center gap-4 text-sm text-muted-foreground">
-                <span className="inline-flex items-center gap-2 rounded-full border border-border px-2 py-1">
+              <motion.div 
+                className="mt-8 flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.6 }}
+              >
+                <span className="inline-flex items-center gap-2 rounded-full border border-border/50 px-3 py-1.5 backdrop-blur-sm">
                   <span className="size-1.5 rounded-full bg-chart-4" /> 12,800+ battles
                 </span>
-                <span className="inline-flex items-center gap-2 rounded-full border border-border px-2 py-1">
-                  Streak: <strong className="font-semibold">{streak}</strong>
+                <span className="inline-flex items-center gap-2 rounded-full border border-border/50 px-3 py-1.5 backdrop-blur-sm">
+                  Streak: <strong className="font-semibold text-foreground">{streak}</strong>
                 </span>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between text-sm text-muted-foreground">
+      <footer className="border-t border-border/50 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between text-sm text-muted-foreground">
           <span>© {new Date().getFullYear()} Agent Battle Arena</span>
           <div className="flex items-center gap-4">
-            <Link href="/privacy" className="hover:text-foreground">Privacy</Link>
-            <Link href="/terms" className="hover:text-foreground">Terms</Link>
+            <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+            <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
           </div>
         </div>
       </footer>

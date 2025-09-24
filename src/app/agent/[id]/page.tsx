@@ -5,6 +5,9 @@ import { Button } from "@/components/ui/button";
 import { db } from "@/db";
 import { agents, matchPlayers, matches } from "@/db/schema";
 import { and, desc, eq, ne } from "drizzle-orm";
+import { motion } from "framer-motion";
+import { Badge } from "@/components/ui/badge";
+import { Edit, Delete, Crown, Bot, Trophy, Zap, Sparkles, AlertCircle } from "lucide-react";
 
 async function getAgent(id: number) {
   const [agent] = await db.select().from(agents).where(eq(agents.id, id));
@@ -60,62 +63,149 @@ export default async function AgentDetailPage({ params }: { params: { id: string
   const { agent, recent } = data as any;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">{agent.name}</h1>
-        <div className="flex gap-2">
-          <Button asChild variant="secondary"><Link href="/agent">Back to Agents</Link></Button>
-          <Button asChild><Link href={`/match?agentId=${agent.id}`}>Battle</Link></Button>
-        </div>
-      </div>
-
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-base">Prompt Profile</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground whitespace-pre-wrap">{agent.promptProfile}</p>
-          {Array.isArray(agent.memorySnippets) && agent.memorySnippets.length > 0 && (
-            <div className="mt-4">
-              <div className="text-foreground font-medium text-sm">Memory Snippets</div>
-              <ul className="mt-2 list-disc pl-5 text-sm text-muted-foreground">
-                {agent.memorySnippets.map((m: string, i: number) => (
-                  <li key={i}>{m}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {agent?.stats && (
-            <div className="mt-4 grid gap-4 sm:grid-cols-3 text-sm">
-              <div>Wins: <span className="text-foreground font-medium">{agent.stats.wins ?? 0}</span></div>
-              <div>Losses: <span className="text-foreground font-medium">{agent.stats.losses ?? 0}</span></div>
-              <div>MMR: <span className="text-foreground font-medium">{agent.stats.mmr ?? 0}</span></div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle className="text-base">Recent Matches</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {(!recent || recent.length === 0) && (
-            <div className="text-sm text-muted-foreground">No recent matches.</div>
-          )}
-          <div className="grid gap-3">
-            {recent?.map((m: any) => (
-              <div key={`${m.matchId}`} className="flex items-center justify-between text-sm">
-                <div className="text-muted-foreground">
-                  <span className="text-foreground font-medium">Match #{m.matchId}</span>
-                  {m.opponentName && <span className="ml-2">vs {m.opponentName}</span>}
-                </div>
-                <Button asChild size="sm" variant="secondary"><Link href={`/match/${m.matchId}`}>View Replay</Link></Button>
-              </div>
-            ))}
+    <div className="max-w-5xl mx-auto px-4 py-8 sm:py-12 lg:py-16">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-center justify-between mb-8"
+      >
+        <div className="flex items-center gap-4">
+          <div className="inline-flex size-12 items-center justify-center rounded-lg bg-gradient-to-br from-chart-4 to-chart-3 text-background ring-1 ring-border">
+            <Bot className="size-6" />
           </div>
-        </CardContent>
-      </Card>
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">{agent.name}</h1>
+            <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+              <Badge variant="secondary" className="px-3 py-1">
+                MMR {agent.stats?.mmr ?? 0}
+              </Badge>
+              <span className="flex items-center gap-1">
+                <Trophy className="size-4 text-chart-4" /> {agent.stats?.wins ?? 0} Wins
+              </span>
+              <span className="flex items-center gap-1">
+                <Zap className="size-4 text-destructive" /> {agent.stats?.losses ?? 0} Losses
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/agent">Back to Agents</Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href={`/match?agentId=${agent.id}`}>Battle</Link>
+          </Button>
+          <Button variant="ghost" size="sm" className="p-2">
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="sm" className="p-2 text-destructive">
+            <Delete className="h-4 w-4" />
+          </Button>
+        </div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="grid lg:grid-cols-3 gap-8"
+      >
+        <Card className="lg:col-span-2 overflow-hidden group hover:shadow-lg transition-all">
+          <CardHeader className="p-6 bg-gradient-to-br from-background/50 to-muted/50">
+            <CardTitle className="flex items-center gap-2">Prompt Profile</CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 space-y-6">
+            <div className="prose prose-sm max-w-none text-foreground bg-accent/5 p-4 rounded-lg">
+              <p className="whitespace-pre-wrap">{agent.promptProfile}</p>
+            </div>
+            {Array.isArray(agent.memorySnippets) && agent.memorySnippets.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="space-y-2"
+              >
+                <h3 className="font-medium flex items-center gap-2 text-sm">
+                  <Sparkles className="size-4" /> Memory Snippets
+                </h3>
+                <div className="grid gap-2">
+                  {agent.memorySnippets.map((m: string, i: number) => (
+                    <Badge key={i} variant="secondary" className="text-xs px-3 py-1">
+                      {m}
+                    </Badge>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden group hover:shadow-lg transition-all">
+          <CardHeader className="p-6 bg-gradient-to-br from-background/50 to-muted/50">
+            <CardTitle className="flex items-center gap-2">Stats</CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 grid gap-4 text-sm">
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Wins</span>
+              <Badge variant="default" className="px-3 py-1">{agent.stats?.wins ?? 0}</Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Losses</span>
+              <Badge variant="destructive" className="px-3 py-1">{agent.stats?.losses ?? 0}</Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Win Rate</span>
+              <Badge variant="secondary" className="px-3 py-1">
+                {((agent.stats?.wins / (agent.stats?.wins + agent.stats?.losses)) * 100 || 0).toFixed(0)}%
+              </Badge>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">MMR</span>
+              <Badge variant="default" className="px-3 py-1 font-mono">{agent.stats?.mmr ?? 0}</Badge>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.4 }}
+        className="mt-8"
+      >
+        <Card className="overflow-hidden">
+          <CardHeader className="p-6 bg-gradient-to-br from-background/50 to-muted/50">
+            <CardTitle className="flex items-center gap-2">Recent Matches</CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            {(!recent || recent.length === 0) ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <AlertCircle className="mx-auto h-8 w-8 mb-2" />
+                No recent matches yet. Battle to build your history!
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recent.map((m: any) => (
+                  <motion.div
+                    key={m.matchId}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="flex items-center justify-between p-4 rounded-lg bg-muted/50 group hover:bg-accent/10 transition-colors"
+                  >
+                    <div className="text-sm">
+                      <span className="font-medium text-foreground">Match #{m.matchId}</span>
+                      {m.opponentName && <span className="ml-2 text-muted-foreground">vs {m.opponentName}</span>}
+                      <div className="text-xs text-muted-foreground mt-1">{new Date(m.createdAt).toLocaleDateString()}</div>
+                    </div>
+                    <Button asChild size="sm" variant="outline" className="group-hover:bg-foreground/10">
+                      <Link href={`/match/${m.matchId}`}>View Replay</Link>
+                    </Button>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   );
 }

@@ -8,8 +8,6 @@ import ConnectWalletButton from "@/components/near/ConnectWalletButton";
 
 export const SiteHeader = () => {
   const [open, setOpen] = useState(false);
-  // usage meter state
-  const [usage, setUsage] = useState<{ dailyUsed: number; dailyLimit: number } | null>(null);
 
   const nav = [
     { href: "/agent/browse", label: "Browse Agents" },
@@ -19,29 +17,6 @@ export const SiteHeader = () => {
     { href: "/agent", label: "My Agents" },
     { href: "/multiplayer", label: "Multiplayer" },
   ];
-
-  useEffect(() => {
-    let alive = true;
-    const fetchUsage = async () => {
-      try {
-        const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
-        const res = await fetch("/api/usage", {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
-        const json = await res.json();
-        if (!alive) return;
-        const d = json?.data;
-        if (d && typeof d.dailyUsed === "number" && typeof d.dailyLimit === "number") {
-          setUsage({ dailyUsed: d.dailyUsed, dailyLimit: d.dailyLimit });
-        }
-      } catch (_) {
-        // no-op
-      }
-    };
-    fetchUsage();
-    const id = setInterval(fetchUsage, 20_000);
-    return () => { alive = false; clearInterval(id); };
-  }, []);
 
   return (
     <header className="sticky top-0 z-50">
@@ -59,11 +34,11 @@ export const SiteHeader = () => {
             <span className="inline-flex items-center justify-center size-9 rounded-md bg-gradient-to-br from-chart-4 to-chart-3 text-background shadow-sm ring-1 ring-border">
               <Swords className="size-5" />
             </span>
-            <div className="flex flex-col leading-tight">
-              <span className="font-extrabold tracking-tight text-base sm:text-lg">
+            <div className="flex flex-col leading-tight min-w-0">
+              <span className="font-extrabold tracking-tight text-base sm:text-lg whitespace-nowrap">
                 Agent Battle Arena
               </span>
-              <span className="text-[10px] sm:text-xs text-muted-foreground -mt-0.5">
+              <span className="text-[10px] sm:text-xs text-muted-foreground whitespace-nowrap -mt-0.5">
                 Train • Battle • Evolve
               </span>
             </div>
@@ -75,7 +50,7 @@ export const SiteHeader = () => {
               <Link
                 key={n.href}
                 href={n.href}
-                className="group flex items-center gap-1.5 rounded-md px-3 py-2 text-muted-foreground transition-colors hover:text-foreground"
+                className="group flex items-center gap-1.5 rounded-md px-3 py-2 text-muted-foreground transition-all hover:text-foreground hover:scale-105"
               >
                 {n.label}
                 <motion.span
@@ -88,18 +63,8 @@ export const SiteHeader = () => {
             ))}
           </nav>
 
-          {/* Usage meter */}
-          {usage && (
-            <div className="hidden md:flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-muted-foreground/80">
-                <div className="w-2 h-2 rounded-full bg-chart-4 animate-pulse" />
-                <span>{usage.dailyUsed}/{usage.dailyLimit} matches today</span>
-              </div>
-            </div>
-          )}
-
           {/* Right side: Connect wallet */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <ConnectWalletButton />
             <Button
               variant="ghost"
@@ -120,7 +85,7 @@ export const SiteHeader = () => {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.2 }}
+          transition={{ duration: 0.3, ease: "easeInOut" }}
           className="md:hidden"
         >
           <div className="flex flex-col space-y-4 bg-background border-t border-border px-4 py-6">
@@ -128,19 +93,12 @@ export const SiteHeader = () => {
               <Link
                 key={item.href}
                 href={item.href}
-                className="text-sm text-muted-foreground hover:text-foreground -mx-2 px-2 py-2"
+                className="text-sm text-muted-foreground hover:text-foreground -mx-2 px-2 py-2 transition-colors"
                 onClick={() => setOpen(false)}
               >
                 {item.label}
               </Link>
             ))}
-            {usage && (
-              <div className="pt-4 border-t border-border">
-                <span className="text-sm text-muted-foreground">
-                  {usage.dailyUsed}/{usage.dailyLimit} matches today
-                </span>
-              </div>
-            )}
             <ConnectWalletButton className="mt-4" onConnect={() => setOpen(false)} />
           </div>
         </motion.div>
