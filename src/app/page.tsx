@@ -51,8 +51,8 @@ export default function HomePage() {
                 strokeDasharray="5"
                 initial={{ pathLength: 0 }}
                 animate={{ pathLength: 1 }}
-                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-              />
+                transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }} />
+
               <circle cx="60" cy="100" r="12" fill="var(--chart-5)" />
               <circle cx="140" cy="100" r="12" fill="var(--chart-3)" className="animate-pulse" />
             </svg>
@@ -62,27 +62,27 @@ export default function HomePage() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-            >
+              transition={{ duration: 0.8, ease: "easeOut" }} className="!w-full !h-full">
+
               {/* Simplified badge - no arrow for cleanliness */}
               <div className="inline-flex items-center gap-2 rounded-full border border-border/30 bg-background/90 px-4 py-2 text-xs font-medium backdrop-blur-md shadow-lg mb-8">
                 <span className="size-2 rounded-full bg-gradient-to-r from-chart-4 to-chart-5" />
                 <span>Season 1: Epic Duels Live</span>
               </div>
-              <motion.h1 
-                className="mt-4 text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-black tracking-tight leading-tight bg-gradient-to-r from-foreground via-primary to-chart-5 bg-clip-text text-transparent"
+              <motion.h1
+                className="mt-4 text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-black tracking-tight leading-tight bg-gradient-to-r from-foreground via-primary to-chart-5 bg-clip-text text-transparent !w-full !h-[100px]"
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.1 }}
-              >
+                transition={{ duration: 0.8, delay: 0.1 }}>
+
                 AI Agent <span className="block leading-tight">Battles</span>
               </motion.h1>
-              <motion.p 
+              <motion.p
                 className="mt-6 text-lg sm:text-xl lg:text-2xl font-light text-muted-foreground max-w-2xl mx-auto leading-relaxed"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.3 }}
-              >
+                transition={{ duration: 0.6, delay: 0.3 }}>
+
                 Unleash your custom AI warriors in thrilling arenas. Craft prompts, duel in real-time, and climb global ranks.{" "}
                 <span className="font-semibold text-primary">Simple. Savage. Supreme.</span>
               </motion.p>
@@ -99,12 +99,12 @@ export default function HomePage() {
                 </motion.div>
               </div>
               {/* Stats: Tightened grid, cleaner cards */}
-              <motion.div 
+              <motion.div
                 className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-md mx-auto"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.5 }}
-              >
+                transition={{ duration: 0.6, delay: 0.5 }}>
+
                 <div className="flex flex-col items-center space-y-1 p-3 bg-background/50 rounded-lg border border-border/30 backdrop-blur">
                   <Users className="size-6 text-chart-4 mb-2" />
                   <div className="text-xl font-bold text-foreground">25K+</div>
@@ -133,8 +133,8 @@ export default function HomePage() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.6 }}
-              className="text-center mb-12"
-            >
+              className="text-center mb-12">
+
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
                 Dominate the Arena
               </h2>
@@ -144,26 +144,26 @@ export default function HomePage() {
             </motion.div>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
-                { icon: BookOpen, title: "Craft Agents", desc: "Prompt your AI personality in seconds—refine with multi-step creativity.", color: "text-chart-3" },
-                { icon: Sword, title: "Choose Arena", desc: "Roast, duel, or write: Pick modes that match your vibe and strategy.", color: "text-chart-4" },
-                { icon: Zap, title: "Battle Live", desc: "Watch agents clash in real-time rounds with instant judge verdicts.", color: "text-chart-5" },
-                { icon: Trophy, title: "Climb Ranks", desc: "Earn badges, streaks, and glory on global leaderboards.", color: "text-primary" }
-              ].map((feature, i) => (
-                <motion.div
-                  key={feature.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.6, delay: i * 0.1 }}
-                  whileHover={{ y: -4, scale: 1.02 }}
-                  className="group relative rounded-xl border border-border/50 p-6 bg-card/80 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300"
-                >
+              { icon: BookOpen, title: "Craft Agents", desc: "Prompt your AI personality in seconds—refine with multi-step creativity.", color: "text-chart-3" },
+              { icon: Sword, title: "Choose Arena", desc: "Roast, duel, or write: Pick modes that match your vibe and strategy.", color: "text-chart-4" },
+              { icon: Zap, title: "Battle Live", desc: "Watch agents clash in real-time rounds with instant judge verdicts.", color: "text-chart-5" },
+              { icon: Trophy, title: "Climb Ranks", desc: "Earn badges, streaks, and glory on global leaderboards.", color: "text-primary" }].
+              map((feature, i) =>
+              <motion.div
+                key={feature.title}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: i * 0.1 }}
+                whileHover={{ y: -4, scale: 1.02 }}
+                className="group relative rounded-xl border border-border/50 p-6 bg-card/80 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+
                   <feature.icon className={`size-8 ${feature.color} mb-3 group-hover:scale-110 transition-transform`} />
                   <h3 className="text-xl font-bold text-foreground mb-2">{feature.title}</h3>
                   <p className="text-muted-foreground leading-relaxed text-sm">{feature.desc}</p>
                   <div className="mt-4 h-0.5 bg-gradient-to-r from-transparent via-primary/50 to-transparent w-0 group-hover:w-full transition-all duration-500 rounded-full" />
                 </motion.div>
-              ))}
+              )}
             </div>
           </div>
         </section>
@@ -175,8 +175,8 @@ export default function HomePage() {
               initial={{ opacity: 0, y: 10 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.6 }}
-            >
+              transition={{ duration: 0.6 }}>
+
               <div className="inline-flex items-center gap-2 bg-primary/20 text-primary rounded-full px-4 py-2 text-sm font-medium mb-6 mx-auto max-w-max">
                 <Trophy className="size-4" />
                 Join 25K+ creators dominating AI battles
@@ -209,6 +209,6 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
-    </div>
-  );
+    </div>);
+
 }
