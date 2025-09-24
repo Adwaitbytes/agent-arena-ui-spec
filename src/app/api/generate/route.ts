@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { z } from 'zod';
-import { pinJSON, isPinataConfigured } from '@/lib/pinata';
+import { smartUpload } from '@/lib/storage';
 
 const generateSchema = z.object({
     agentPrompt: z.string().min(1),
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
         }
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); // Normal agents use 1.5 Flash
 
         // Construct the prompt for the AI
         const fullPrompt = `You are an AI agent${agentName ? ` named "${agentName}"` : ''} with the following personality and instructions:
@@ -64,30 +64,31 @@ Respond as your character would:`;
             generatedBy: 'gemini-1.5-flash'
         };
 
-        // Store to Pinata if configured
-        let ipfsHash = null;
-        if (isPinataConfigured()) {
-            try {
-                const pinResult = await pinJSON(responseData, {
-                    name: `agent-response-${agentName || 'unknown'}-${Date.now()}.json`,
-                    keyvalues: {
-                        type: 'agent-response',
-                        agentName: agentName || 'unknown',
-                        timestamp: new Date().toISOString(),
-                    }
-                });
-                ipfsHash = pinResult.IpfsHash;
-                console.log(`Agent response stored to IPFS: ${ipfsHash}`);
-            } catch (error) {
-                console.error('Failed to store to Pinata:', error);
-            }
+        // Store using IPFS via Pinata
+        let storageHash = null;
+        let storageType = null;
+
+        try {
+            const result = await smartUpload(responseData, {
+                name: `agent-response-${agentName || 'unknown'}-${Date.now()}.json`,
+                description: `Agent response for ${agentName || 'unknown'} at ${new Date().toISOString()}`
+            });
+
+            storageHash = result.cid;
+            storageType = result.storageType;
+            console.log(`Agent response stored to ${result.storageType}: ${storageHash}`);
+        } catch (error) {
+            console.error('Failed to store agent response:', error);
         }
 
         return NextResponse.json({
             ok: true,
             data: {
                 ...responseData,
-                ipfsHash
+                storageHash,
+                storageType,
+                // Legacy compatibility  
+                ipfsHash: storageType === 'pinata' ? storageHash : null
             },
         });
 

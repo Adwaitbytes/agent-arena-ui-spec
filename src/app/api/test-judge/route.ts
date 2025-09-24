@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
         }
 
         const genAI = new GoogleGenerativeAI(superagentKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' }); // Superagent uses 2.0 Flash Experimental
 
         const superJudgePrompt = `You are a SUPERAGENT - an elite AI judge with expertise in evaluating AI agent responses.
 

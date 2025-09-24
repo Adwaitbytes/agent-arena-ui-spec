@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { matches, rounds } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { isPinataConfigured, pinJSON } from '@/lib/pinata';
+import { smartUpload, getStorageStatus } from '@/lib/storage';
 
 const createRoundSchema = z.object({
   idx: z.number().int().min(0),
@@ -48,23 +48,35 @@ export async function POST(
 
     const { idx, question, ipfsCid, judgeScores, resultSummary, answers } = validation.data as any;
 
-    // Optionally pin round payload to IPFS via Pinata when configured and no CID provided
+    // Optionally store round payload using smart storage (Filecoin-first) when no CID provided
     let ipfsCidToUse: string | null = ipfsCid || null;
-    if (!ipfsCidToUse && isPinataConfigured()) {
-      try {
-        const payload = {
-          matchId,
-          round: idx,
-          mode: match.mode,
-          question,
-          answers: answers ?? null,
-          judge: judgeScores ? { scores: judgeScores, rationale: null, flags: null } : null,
-          timestamps: { createdAt: Date.now() },
-        };
-        const res = await pinJSON(payload, { name: `match-${matchId}-round-${idx}` });
-        ipfsCidToUse = res.IpfsHash;
-      } catch (e) {
-        console.error('Pinata pin failed, continuing without CID:', e);
+    if (!ipfsCidToUse) {
+      const storageStatus = getStorageStatus();
+      if (storageStatus.available) {
+        try {
+          const payload = {
+            matchId,
+            round: idx,
+            mode: match.mode,
+            question,
+            answers: answers ?? null,
+            judge: judgeScores ? { scores: judgeScores, rationale: null, flags: null } : null,
+            timestamps: { createdAt: Date.now() },
+          };
+
+          const res = await smartUpload(payload, {
+            name: `match-${matchId}-round-${idx}`,
+            description: `Round ${idx} data for match ${matchId}`,
+            matchId: matchId.toString(),
+            round: idx.toString()
+          });
+
+          ipfsCidToUse = res.cid;
+          console.log(`✅ Round ${idx} stored on ${res.storageType}: ${res.cid}`);
+
+        } catch (e) {
+          console.error('Storage upload failed, continuing without CID:', e);
+        }
       }
     }
 

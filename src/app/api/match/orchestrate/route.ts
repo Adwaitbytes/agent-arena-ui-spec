@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { agents, matches, matchPlayers, rounds } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { pinJSON, isPinataConfigured } from '@/lib/pinata';
+import { smartUpload } from '@/lib/storage';
 
 const orchestrateSchema = z.object({
   mode: z.enum(["boxing", "cricket", "carrom"]).default("boxing"),
@@ -13,25 +13,18 @@ const orchestrateSchema = z.object({
   prompt: z.string().min(1).max(2000),
 });
 
-async function uploadToPinata(filename: string, data: any): Promise<string | null> {
+async function uploadToStorage(filename: string, data: any, matchId?: string): Promise<{ hash: string; type: string } | null> {
   try {
-    if (!isPinataConfigured()) {
-      console.log('Pinata not configured, skipping upload');
-      return null;
-    }
-
-    const result = await pinJSON(data, {
+    const result = await smartUpload(data, {
       name: filename,
-      keyvalues: {
-        type: 'agent-match-response',
-        timestamp: new Date().toISOString(),
-      }
+      description: `Agent match response: ${filename}`,
+      matchId: matchId
     });
 
-    console.log(`Uploaded to Pinata: ${result.IpfsHash}`);
-    return result.IpfsHash;
+    console.log(`Uploaded to ${result.storageType}: ${result.cid}`);
+    return { hash: result.cid, type: result.storageType };
   } catch (error) {
-    console.error('Pinata upload failed:', error);
+    console.error('Storage upload failed:', error);
     return null;
   }
 }
@@ -88,28 +81,59 @@ Respond as your character would:`;
     const responseB = await resultB.response;
 
     return {
-      engine: "gemini-1.5-flash",
+      engine: "gemini-1.5-flash", // Normal agents use 1.5 Flash
       answers: {
         a: responseA.text().trim(),
         b: responseB.text().trim(),
       },
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Gemini API error:', error);
-    // Fallback to mock responses
-    const seed = (s: string) => Array.from(s).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-    const sa = seed(aProfile + prompt) % 100;
-    const sb = seed(bProfile + prompt) % 100;
-    const aAnswer = `${aName} response (${sa}): ${prompt}\nResponse showcasing creativity, structure, and flair.`;
-    const bAnswer = `${bName} response (${sb}): ${prompt}\nResponse emphasizing logic, humor, and style.`;
-    return {
-      engine: "mock-fallback",
-      answers: {
-        a: aAnswer,
-        b: bAnswer,
-      },
-    };
+
+    // Enhanced error handling for quota limits
+    if (error?.status === 429) {
+      console.log('⚠️ Gemini API quota exceeded, using enhanced mock responses');
+      return generateEnhancedMockResponses(prompt, aProfile, bProfile, aName, bName);
+    }
+
+    // Fallback to mock responses for other errors
+    return generateEnhancedMockResponses(prompt, aProfile, bProfile, aName, bName);
   }
+}
+
+// Enhanced mock response generator for quota exceeded scenarios
+function generateEnhancedMockResponses(prompt: string, aProfile: string, bProfile: string, aName: string, bName: string) {
+  const seed = (s: string) => Array.from(s).reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  const sa = seed(aProfile + prompt) % 100;
+  const sb = seed(bProfile + prompt) % 100;
+
+  // Generate more realistic responses based on agent personalities
+  const aResponse = generatePersonalityResponse(aName, aProfile, prompt, sa);
+  const bResponse = generatePersonalityResponse(bName, bProfile, prompt, sb);
+
+  return {
+    engine: "mock-quota-exceeded",
+    answers: {
+      a: aResponse,
+      b: bResponse,
+    },
+  };
+}
+
+// Generate personality-aware mock responses
+function generatePersonalityResponse(name: string, profile: string, prompt: string, seed: number): string {
+  // Extract key personality traits
+  const isCreative = profile.toLowerCase().includes('creative') || profile.toLowerCase().includes('artistic');
+  const isLogical = profile.toLowerCase().includes('logical') || profile.toLowerCase().includes('analytical');
+  const isHumorous = profile.toLowerCase().includes('funny') || profile.toLowerCase().includes('wit');
+
+  const responses = [
+    `${name} approaches this thoughtfully: "${prompt}" requires careful consideration. Based on my personality, I would ${isCreative ? 'explore creative angles' : isLogical ? 'analyze systematically' : 'engage authentically'}.`,
+    `${name} responds: This is an interesting challenge! ${isHumorous ? 'Let me add some wit to this...' : isCreative ? 'My creative perspective suggests...' : 'Logically speaking...'} [Note: API quota exceeded, showing demonstration response]`,
+    `${name}: "${prompt}" - ${isCreative ? '🎨 Creative response incoming!' : isLogical ? '🧠 Analytical breakdown follows:' : '💭 Thoughtful perspective:'} This showcases my unique personality traits.`,
+  ];
+
+  return responses[seed % responses.length];
 }
 
 async function superagentJudge(aText: string, bText: string, aName: string, bName: string, prompt: string, aProfile: string, bProfile: string) {
@@ -121,7 +145,7 @@ async function superagentJudge(aText: string, bText: string, aName: string, bNam
     }
 
     const genAI = new GoogleGenerativeAI(superagentKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }); // Use Flash for reliability
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' }); // Use latest model for superagent judging
 
     const superJudgePrompt = `You are a SUPERAGENT - an elite AI judge evaluating agent responses.
 
@@ -177,8 +201,14 @@ Respond with ONLY this JSON format:
       console.error('Failed to parse superagent judge response:', text);
       return judgeFallback(aText, bText);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Superagent judge error:', error);
+
+    // Handle quota errors for superagent
+    if (error?.status === 429) {
+      console.log('⚠️ Superagent quota exceeded, using fallback judge');
+    }
+
     return judgeFallback(aText, bText);
   }
 } function judgeFallback(aText: string, bText: string) {
@@ -262,15 +292,19 @@ export async function POST(req: NextRequest) {
       timestamps: { createdAt: Date.now() },
     };
 
-    // Upload to Pinata
-    const cid = await uploadToPinata(`match-${match.id}-round-0.json`, transcript);
+    // Upload to storage
+    const storageResult = await uploadToStorage(
+      `match-${match.id}-round-0.json`,
+      transcript,
+      match.id.toString()
+    );
 
     // Persist round
     const [round] = await db.insert(rounds).values({
       matchId: match.id,
       idx: 0,
       question: prompt,
-      ipfsCid: cid,
+      ipfsCid: storageResult?.hash || null,
       judgeScores: verdict.scores as any,
       resultSummary: `${verdict.winner === "A" ? agentA.name : agentB.name} wins — ${verdict.summary}`,
       createdAt: Date.now(),
@@ -284,7 +318,10 @@ export async function POST(req: NextRequest) {
       data: {
         matchId: match.id,
         round,
-        cid,
+        storageHash: storageResult?.hash,
+        storageType: storageResult?.type,
+        // Legacy compatibility
+        cid: storageResult?.hash,
         winner: verdict.winner,
         transcript: {
           answers: { A: os.answers.a, B: os.answers.b },

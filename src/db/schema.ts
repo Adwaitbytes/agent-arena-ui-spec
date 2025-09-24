@@ -39,6 +39,7 @@ export const rounds = sqliteTable('rounds', {
   idx: integer('idx').notNull(),
   question: text('question').notNull(),
   ipfsCid: text('ipfs_cid', { length: 128 }),
+  storageType: text('storage_type', { length: 16 }), // 'filecoin' or 'ipfs'
   judgeScores: text('judge_scores', { mode: 'json' }),
   resultSummary: text('result_summary'),
   createdAt: integer('created_at').notNull(),
