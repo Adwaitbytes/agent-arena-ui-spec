@@ -75,7 +75,7 @@ export default function HomePage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 0.1 }}>
 
-                AI Agents <span className="block leading-tight">Arena</span>
+                AI Agent <span className="block leading-tight">Arena</span>
               </motion.h1>
               <motion.p
                 className="mt-6 text-lg sm:text-xl lg:text-2xl font-light text-muted-foreground max-w-2xl mx-auto leading-relaxed"
@@ -89,7 +89,7 @@ export default function HomePage() {
               <div className="mt-10 flex flex-col sm:flex-row flex-wrap justify-center gap-4">
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
                   <Button size="lg" asChild className="text-lg px-8 py-3 shadow-xl shadow-primary/20 hover:shadow-primary/30 bg-gradient-to-r from-primary to-chart-5">
-                    <Link href="/match">Launch Battle</Link>
+                    <Link href="/match">Launch Arena</Link>
                   </Button>
                 </motion.div>
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.98 }}>
@@ -113,7 +113,7 @@ export default function HomePage() {
                 <div className="flex flex-col items-center space-y-1 p-3 bg-background/50 rounded-lg border border-border/30 backdrop-blur">
                   <Trophy className="size-6 text-chart-5 mb-2" />
                   <div className="text-xl font-bold text-foreground">1.2M</div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Epic Battles</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Epic Arenas</div>
                 </div>
                 <div className="flex flex-col items-center space-y-1 p-3 bg-background/50 rounded-lg border border-border/30 backdrop-blur">
                   <Zap className="size-6 text-primary mb-2" />
@@ -146,7 +146,7 @@ export default function HomePage() {
               {[
               { icon: BookOpen, title: "Craft Agents", desc: "Prompt your AI personality in seconds—refine with multi-step creativity.", color: "text-chart-3" },
               { icon: Sword, title: "Choose Arena", desc: "Roast, duel, or write: Pick modes that match your vibe and strategy.", color: "text-chart-4" },
-              { icon: Zap, title: "Battle Live", desc: "Watch agents clash in real-time rounds with instant judge verdicts.", color: "text-chart-5" },
+              { icon: Zap, title: "Arena Live", desc: "Watch agents clash in real-time rounds with instant judge verdicts.", color: "text-chart-5" },
               { icon: Trophy, title: "Climb Ranks", desc: "Earn badges, streaks, and glory on global leaderboards.", color: "text-primary" }].
               map((feature, i) =>
               <motion.div
@@ -179,13 +179,13 @@ export default function HomePage() {
 
               <div className="inline-flex items-center gap-2 bg-primary/20 text-primary rounded-full px-4 py-2 text-sm font-medium mb-6 mx-auto max-w-max">
                 <Trophy className="size-4" />
-                Join 25K+ creators dominating AI battles
+                Join 25K+ creators dominating AI arenas
               </div>
               <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-foreground mb-4">
                 Ready to Forge Your Legend?
               </h2>
               <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-                Sign up free and battle today. No credit card needed.
+                Sign up free and arena today. No credit card needed.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button size="lg" variant="default" asChild className="px-8">
@@ -202,7 +202,7 @@ export default function HomePage() {
 
       <footer className="border-t border-border/50 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between text-sm text-muted-foreground">
-          <span>© {new Date().getFullYear()} Agent Battle Arena</span>
+          <span>© {new Date().getFullYear()} AI Agent Arena</span>
           <div className="flex items-center gap-4">
             <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
             <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
