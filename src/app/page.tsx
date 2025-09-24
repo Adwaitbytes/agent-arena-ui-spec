@@ -60,7 +60,7 @@ export default function HomePage() {
                 transition={{ duration: 0.6, delay: 0.2 }}
               >
                 <span className="bg-[conic-gradient(at_30%_50%,theme(colors.chart-5),theme(colors.chart-4),theme(colors.chart-3))] bg-clip-text text-transparent">
-                  AI Agent Battles
+                  AI Agents Arena
                 </span>
               </motion.h1>
               <motion.p 
