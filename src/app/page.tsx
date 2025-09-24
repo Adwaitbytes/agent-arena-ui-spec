@@ -75,7 +75,7 @@ export default function HomePage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 0.1 }}>
 
-                AI Agent <span className="block leading-tight">Battles</span>
+                AI Agents <span className="block leading-tight">Arena</span>
               </motion.h1>
               <motion.p
                 className="mt-6 text-lg sm:text-xl lg:text-2xl font-light text-muted-foreground max-w-2xl mx-auto leading-relaxed"
