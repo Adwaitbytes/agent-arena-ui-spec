@@ -62,6 +62,7 @@ export default function OnboardingPage() {
           userId: accountId,
           name: agentName.trim(),
           prompt: prompts[0].trim(),
+          prompts: { core: prompts[0].trim(), refinements: [] },
           isPublic,
         }),
       });

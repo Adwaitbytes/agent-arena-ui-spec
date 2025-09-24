@@ -94,6 +94,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    // Accept legacy payloads that send `prompt` instead of `prompts`
+    if (!body?.prompts && typeof body?.prompt === 'string') {
+      body.prompts = { core: body.prompt, refinements: [] };
+    }
+
     const validation = createAgentSchema.safeParse(body);
 
     if (!validation.success) {
