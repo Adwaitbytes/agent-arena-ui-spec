@@ -75,87 +75,75 @@ export const SiteHeader = () => {
               <Link
                 key={n.href}
                 href={n.href}
-                className="hover:text-primary transition-colors"
+                className="group flex items-center gap-1.5 rounded-md px-3 py-2 text-muted-foreground transition-colors hover:text-foreground"
               >
                 {n.label}
+                <motion.span
+                  className="size-2 rounded-full bg-current opacity-0 group-hover:opacity-100"
+                  initial={{ scale: 0 }}
+                  whileHover={{ scale: 1.2 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                />
               </Link>
             ))}
           </nav>
 
-          <div className="hidden sm:flex items-center gap-3">
-            {/* Usage meter */}
-            <div className="hidden md:flex items-center gap-2">
-              <div className="w-32 h-2 rounded bg-accent/60 overflow-hidden">
-                <div
-                  className="h-full bg-chart-4 transition-[width] duration-500"
-                  style={{ width: `${Math.min(100, Math.round(((usage?.dailyUsed ?? 0) / Math.max(1, usage?.dailyLimit ?? 10)) * 100))}%` }}
-                />
+          {/* Usage meter */}
+          {usage && (
+            <div className="hidden md:flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-muted-foreground/80">
+                <div className="w-2 h-2 rounded-full bg-chart-4 animate-pulse" />
+                <span>{usage.dailyUsed}/{usage.dailyLimit} matches today</span>
               </div>
-              <span className="text-xs text-muted-foreground">
-                {(usage?.dailyUsed ?? 0)} / {(usage?.dailyLimit ?? 10)}
-              </span>
             </div>
-            <Button size="sm" variant="secondary" asChild>
-              <Link href="/pricing">Upgrade</Link>
-            </Button>
-            <ConnectWalletButton size="sm" />
-          </div>
+          )}
 
-          {/* Mobile menu button */}
-          <button
-            aria-label="Toggle menu"
-            className="md:hidden inline-flex items-center justify-center size-9 rounded-md border border-border"
-            onClick={() => setOpen((o) => !o)}
-          >
-            {open ? <X className="size-5" /> : <Menu className="size-5" />}
-          </button>
+          {/* Right side: Connect wallet */}
+          <div className="flex items-center gap-2">
+            <ConnectWalletButton />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden"
+              onClick={() => setOpen(true)}
+            >
+              <Menu className="h-5 w-5" />
+              <span className="sr-only">Toggle menu</span>
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Mobile panel */}
+      {/* Mobile menu */}
       {open && (
-        <div className="md:hidden border-b border-border bg-background/95 backdrop-blur">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 grid gap-2">
-            {nav.map((n) => (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.2 }}
+          className="md:hidden"
+        >
+          <div className="flex flex-col space-y-4 bg-background border-t border-border px-4 py-6">
+            {nav.map((item) => (
               <Link
-                key={n.href}
-                href={n.href}
+                key={item.href}
+                href={item.href}
+                className="text-sm text-muted-foreground hover:text-foreground -mx-2 px-2 py-2"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-2 px-2 py-2 rounded hover:bg-accent"
               >
-                {n.label === "Browse Agents" && (
-                  <Users className="size-4 text-chart-2" />
-                )}
-                {n.label === "Create Agent" && (
-                  <Bot className="size-4 text-chart-5" />
-                )}
-                {n.label === "Quick Match" && (
-                  <Swords className="size-4 text-chart-3" />
-                )}
-                {n.label === "Leaderboard" && (
-                  <Trophy className="size-4 text-chart-4" />
-                )}
-                {n.label === "My Agents" && (
-                  <Bot className="size-4 text-chart-1" />
-                )}
-                <span>{n.label}</span>
+                {item.label}
               </Link>
             ))}
-            <div className="flex pt-2 gap-2 items-center">
-              {/* Compact usage meter on mobile */}
-              <div className="flex-1 h-2 rounded bg-accent/60 overflow-hidden">
-                <div
-                  className="h-full bg-chart-4"
-                  style={{ width: `${Math.min(100, Math.round(((usage?.dailyUsed ?? 0) / Math.max(1, usage?.dailyLimit ?? 10)) * 100))}%` }}
-                />
+            {usage && (
+              <div className="pt-4 border-t border-border">
+                <span className="text-sm text-muted-foreground">
+                  {usage.dailyUsed}/{usage.dailyLimit} matches today
+                </span>
               </div>
-              <Button size="sm" variant="secondary" asChild>
-                <Link href="/pricing">Upgrade</Link>
-              </Button>
-              <ConnectWalletButton size="default" />
-            </div>
+            )}
+            <ConnectWalletButton className="mt-4" onConnect={() => setOpen(false)} />
           </div>
-        </div>
+        </motion.div>
       )}
     </header>
   );
