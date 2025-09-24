@@ -6,52 +6,62 @@ import { z } from 'zod';
 
 const updateAgentSchema = z.object({
   name: z.string().min(1).max(100).transform(s => s.trim()).optional(),
-  promptProfile: z.string().min(1).transform(s => s.trim()).optional(),
-  memorySnippets: z.array(z.string()).optional(),
-  ownerAccountId: z.string().optional().nullable(),
   persona: z.string().max(500).optional(),
   prompts: z.object({
     core: z.string().min(10),
     refinements: z.array(z.string()).optional()
   }).optional(),
   isPublic: z.boolean().optional(),
-  stats: z.object({}).optional()
 }).refine(data => Object.keys(data).length > 0, {
   message: "At least one field must be provided for update"
 });
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params;
-    const agentId = parseInt(id);
-    if (isNaN(agentId)) {
-      return NextResponse.json({ ok: false, error: 'Invalid agent ID' }, { status: 400 });
+    const id = parseInt(params.id);
+    if (isNaN(id)) {
+      return NextResponse.json(
+        { ok: false, error: 'Invalid agent ID' },
+        { status: 400 }
+      );
     }
 
-    const [agent] = await db.select().from(agents).where(eq(agents.id, agentId));
+    const [agent] = await db.select().from(agents).where(eq(agents.id, id));
+
     if (!agent) {
-      return NextResponse.json({ ok: false, error: 'Agent not found' }, { status: 404 });
+      return NextResponse.json(
+        { ok: false, error: 'Agent not found' },
+        { status: 404 }
+      );
     }
 
-    return NextResponse.json({ ok: true, data: agent });
+    return NextResponse.json({
+      ok: true,
+      data: agent,
+    });
   } catch (error) {
     console.error('GET /api/agents/[id] error:', error);
-    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id } = await params;
-    const agentId = parseInt(id);
-    if (isNaN(agentId)) {
-      return NextResponse.json({ ok: false, error: 'Invalid agent ID' }, { status: 400 });
+    const id = parseInt(params.id);
+    if (isNaN(id)) {
+      return NextResponse.json(
+        { ok: false, error: 'Invalid agent ID' },
+        { status: 400 }
+      );
     }
 
     const body = await request.json();
@@ -65,13 +75,16 @@ export async function PUT(
     }
 
     // Check if agent exists
-    const [existingAgent] = await db.select().from(agents).where(eq(agents.id, agentId));
+    const [existingAgent] = await db.select().from(agents).where(eq(agents.id, id));
     if (!existingAgent) {
-      return NextResponse.json({ ok: false, error: 'Agent not found' }, { status: 404 });
+      return NextResponse.json(
+        { ok: false, error: 'Agent not found' },
+        { status: 404 }
+      );
     }
 
     const updates: any = validation.data;
-
+    
     // Update legacy prompt field if prompts.core is updated
     if (updates.prompts?.core) {
       updates.prompt = updates.prompts.core;
@@ -80,13 +93,19 @@ export async function PUT(
     const [updatedAgent] = await db
       .update(agents)
       .set(updates)
-      .where(eq(agents.id, agentId))
+      .where(eq(agents.id, id))
       .returning();
 
-    return NextResponse.json({ ok: true, data: updatedAgent });
+    return NextResponse.json({
+      ok: true,
+      data: updatedAgent,
+    });
   } catch (error) {
     console.error('PUT /api/agents/[id] error:', error);
-    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 
@@ -95,24 +114,37 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const agentId = parseInt(params.id);
-    if (isNaN(agentId)) {
-      return NextResponse.json({ ok: false, error: 'Invalid agent ID' }, { status: 400 });
+    const id = parseInt(params.id);
+    if (isNaN(id)) {
+      return NextResponse.json(
+        { ok: false, error: 'Invalid agent ID' },
+        { status: 400 }
+      );
     }
 
     // Check if agent exists
-    const [existingAgent] = await db.select().from(agents).where(eq(agents.id, agentId));
+    const [existingAgent] = await db.select().from(agents).where(eq(agents.id, id));
     if (!existingAgent) {
-      return NextResponse.json({ ok: false, error: 'Agent not found' }, { status: 404 });
+      return NextResponse.json(
+        { ok: false, error: 'Agent not found' },
+        { status: 404 }
+      );
     }
 
-    // TODO: Add ownership check if required (verify request userId matches agent.userId)
+    // TODO: Add ownership check - verify request userId matches agent.userId
+    // This would require authentication middleware or header parsing
 
-    await db.delete(agents).where(eq(agents.id, agentId));
+    await db.delete(agents).where(eq(agents.id, id));
 
-    return NextResponse.json({ ok: true, data: { message: 'Agent deleted successfully', id: agentId } });
+    return NextResponse.json({
+      ok: true,
+      data: { message: 'Agent deleted successfully', id }
+    });
   } catch (error) {
     console.error('DELETE /api/agents/[id] error:', error);
-    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

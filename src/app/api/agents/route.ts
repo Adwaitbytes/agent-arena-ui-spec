@@ -7,15 +7,11 @@ import { z } from 'zod';
 const createAgentSchema = z.object({
   userId: z.string().min(1).transform(s => s.trim()),
   name: z.string().min(1).max(100).transform(s => s.trim()),
-  promptProfile: z.string().min(1).transform(s => s.trim()).optional(),
-  memorySnippets: z.array(z.string()).optional(),
-  ownerUserId: z.number().optional().nullable(),
-  ownerAccountId: z.string().optional().nullable(),
   persona: z.string().max(500).optional(),
   prompts: z.object({
     core: z.string().min(10),
     refinements: z.array(z.string()).optional().default([])
-  }).optional(),
+  }),
   isPublic: z.boolean().optional().default(false)
 });
 
@@ -28,7 +24,6 @@ export async function GET(request: NextRequest) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20')));
     const offset = (page - 1) * pageSize;
-    const ownerId = searchParams.get('ownerId');
 
     // Build query conditions
     let whereConditions: any[] = [];
@@ -46,10 +41,6 @@ export async function GET(request: NextRequest) {
     } else {
       // Default: only public agents
       whereConditions.push(eq(agents.isPublic, true));
-    }
-
-    if (ownerId) {
-      whereConditions.push(eq(agents.ownerAccountId, ownerId));
     }
 
     if (search) {
@@ -93,7 +84,10 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('GET /api/agents error:', error);
-    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 
@@ -115,38 +109,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const {
-      userId,
-      name,
-      promptProfile,
-      memorySnippets,
-      ownerUserId,
-      ownerAccountId,
-      persona,
-      prompts,
-      isPublic
-    } = validation.data;
+    const { userId, name, persona, prompts, isPublic } = validation.data;
 
     const [newAgent] = await db.insert(agents).values({
       userId,
       name,
-      promptProfile: promptProfile || null,
-      memorySnippets: memorySnippets || null,
-      ownerUserId: ownerUserId || null,
-      ownerAccountId: ownerAccountId || null,
       persona: persona || null,
-      prompt: prompts?.core || null, // Legacy compatibility
-      prompts: prompts || null,
+      prompt: prompts.core, // Legacy compatibility
+      prompts: prompts as any,
       isPublic,
       wins: 0,
       losses: 0,
-      mmr: 1000,
       createdAt: Date.now(),
     }).returning();
 
-    return NextResponse.json({ ok: true, data: newAgent }, { status: 201 });
+    return NextResponse.json(
+      { ok: true, data: newAgent },
+      { status: 201 }
+    );
   } catch (error) {
     console.error('POST /api/agents error:', error);
-    return NextResponse.json({ ok: false, error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }

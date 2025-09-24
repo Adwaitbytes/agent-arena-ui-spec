@@ -17,7 +17,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // Enable dark mode by default for a stronger web3 vibe
+    <html lang="en" className="dark">
       <body className="antialiased">
         <ErrorReporter />
         <Script
