@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { Menu, X, Swords, Sparkles, Trophy, Bot } from "lucide-react";
+import { Menu, X, Swords, Sparkles, Trophy, Bot, Users } from "lucide-react";
 import ConnectWalletButton from "@/components/near/ConnectWalletButton";
 
 export const SiteHeader = () => {
@@ -12,7 +12,7 @@ export const SiteHeader = () => {
   const [usage, setUsage] = useState<{ dailyUsed: number; dailyLimit: number } | null>(null);
 
   const nav = [
-    { href: "/arena", label: "Arenas" },
+    { href: "/agent/browse", label: "Browse Agents" },
     { href: "/onboarding", label: "Create Agent" },
     { href: "/match", label: "Quick Match" },
     { href: "/leaderboard", label: "Leaderboard" },
@@ -60,15 +60,23 @@ export const SiteHeader = () => {
               <Swords className="size-5" />
             </span>
             <div className="flex flex-col leading-tight">
-              <span className="font-extrabold tracking-tight text-base sm:text-lg">Agent Battle Arena</span>
-              <span className="text-[10px] sm:text-xs text-muted-foreground -mt-0.5">Train • Battle • Evolve</span>
+              <span className="font-extrabold tracking-tight text-base sm:text-lg">
+                Agent Battle Arena
+              </span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground -mt-0.5">
+                Train • Battle • Evolve
+              </span>
             </div>
           </Link>
 
           {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-6 text-sm">
             {nav.map((n) => (
-              <Link key={n.href} href={n.href} className="hover:text-primary transition-colors">
+              <Link
+                key={n.href}
+                href={n.href}
+                className="hover:text-primary transition-colors"
+              >
                 {n.label}
               </Link>
             ))}
@@ -115,10 +123,21 @@ export const SiteHeader = () => {
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-2 px-2 py-2 rounded hover:bg-accent"
               >
-                {n.label === "Arenas" && <Sparkles className="size-4 text-chart-4" />}
-                {n.label === "Create Agent" && <Bot className="size-4 text-chart-5" />}
-                {n.label === "Quick Match" && <Swords className="size-4 text-chart-3" />}
-                {n.label === "Leaderboard" && <Trophy className="size-4 text-chart-4" />}
+                {n.label === "Browse Agents" && (
+                  <Users className="size-4 text-chart-2" />
+                )}
+                {n.label === "Create Agent" && (
+                  <Bot className="size-4 text-chart-5" />
+                )}
+                {n.label === "Quick Match" && (
+                  <Swords className="size-4 text-chart-3" />
+                )}
+                {n.label === "Leaderboard" && (
+                  <Trophy className="size-4 text-chart-4" />
+                )}
+                {n.label === "My Agents" && (
+                  <Bot className="size-4 text-chart-1" />
+                )}
                 <span>{n.label}</span>
               </Link>
             ))}

@@ -12,8 +12,22 @@
     {
       "idx": 1,
       "version": "6",
+      "when": 1758618989974,
+      "tag": "0001_odd_vulcan",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
       "when": 1758609877069,
       "tag": "0001_regular_kate_bishop",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1758662365655,
+      "tag": "0002_bitter_lorna_dane",
       "breakpoints": true
     },
     {
