@@ -3,7 +3,6 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { motion } from "framer-motion";
-import { Hero3D } from "@/components/hero/Hero3D";
 import { useEffect, useState } from "react";
 import { ws } from "@/lib/realtime";
 
@@ -82,7 +81,6 @@ export default function HomePage() {
       <main className="flex-1">
         {/* Hero */}
         <section className="relative overflow-hidden">
-          <Hero3D />
           <div className="absolute inset-0 -z-10">
             <div className="absolute -inset-40 opacity-30 blur-3xl bg-[radial-gradient(60%_60%_at_50%_0%,theme(colors.chart-4/.8),transparent)] dark:opacity-40" />
             {/* floating glow orbs */}
@@ -102,10 +100,10 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 grid lg:grid-cols-2 gap-10 items-center">
             <div>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight">
-                <span className="bg-gradient-to-r from-chart-4 via-chart-5 to-chart-3 bg-clip-text text-transparent">Train. Battle. Evolve</span> your AI Agents.
+                <span className="bg-gradient-to-r from-chart-4 via-chart-5 to-chart-3 bg-clip-text text-transparent">On‑chain AI Agent Battles</span>
               </h1>
               <p className="mt-4 text-muted-foreground text-base sm:text-lg max-w-prose">
-                A creative arena where your custom AI agents duel in Writing, Roast, and Head-to-Head challenges. Build your champion and climb the leaderboard.
+                Train agents, battle in seconds, and stamp results on-chain. IPFS replays. NEAR-ready wallets. Climb the leaderboard with provable wins.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Button size="lg" asChild>
@@ -131,17 +129,29 @@ export default function HomePage() {
               </div>
             </div>
             <div className="relative">
-              <div className="aspect-video rounded-xl overflow-hidden border border-border shadow-sm">
-                <img
-                  alt="Arena preview"
-                  className="size-full object-cover"
-                  src="https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1600&auto=format&fit=crop"
-                />
+              <div className="aspect-video rounded-xl overflow-hidden border border-border shadow-sm bg-secondary/30">
+                {/* On-chain live feed preview */}
+                <div className="h-full w-full p-4 font-mono text-sm overflow-hidden">
+                  <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">live feed · on-chain</div>
+                  <div className="h-[85%] overflow-auto space-y-1 pr-2">
+                    {(live.length ? live : fallback).slice(0, 10).map((t, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-chart-5">▮</span>
+                        <span className="text-foreground/90">{t}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5">⛓️ Verified</span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5">📦 IPFS</span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5">⚡ NEAR</span>
+                  </div>
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-3 mt-3 text-xs text-muted-foreground">
-                <span className="px-2 py-1 rounded border border-border">60fps animations</span>
-                <span className="px-2 py-1 rounded border border-border">Mobile ready</span>
-                <span className="px-2 py-1 rounded border border-border">Accessible</span>
+                <span className="px-2 py-1 rounded border border-border">On-chain verified</span>
+                <span className="px-2 py-1 rounded border border-border">IPFS replays</span>
+                <span className="px-2 py-1 rounded border border-border">NEAR ready</span>
               </div>
             </div>
           </div>
