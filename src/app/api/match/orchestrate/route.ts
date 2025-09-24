@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
 import { db } from "@/db";
 import { agents, matches, matchPlayers, rounds } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { smartUpload } from '@/lib/storage';
+import { golemClient, createMatchOnGolem } from "@/lib/golem-client";
+import { z } from "zod";
 
 const orchestrateSchema = z.object({
   mode: z.enum(["boxing", "cricket", "carrom"]).default("boxing"),
@@ -81,7 +82,7 @@ Respond as your character would:`;
     const responseB = await resultB.response;
 
     return {
-      engine: "gemini-1.5-flash", // Normal agents use 1.5 Flash
+      engine: "gemini-1.5-flash",
       answers: {
         a: responseA.text().trim(),
         b: responseB.text().trim(),
@@ -145,7 +146,7 @@ async function superagentJudge(aText: string, bText: string, aName: string, bNam
     }
 
     const genAI = new GoogleGenerativeAI(superagentKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' }); // Use latest model for superagent judging
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
     const superJudgePrompt = `You are a SUPERAGENT - an elite AI judge evaluating agent responses.
 
@@ -156,7 +157,7 @@ AGENT B (${bName}): "${bText}"
 
 Rate each response 0-10 on:
 - Creativity: How original and imaginative
-- Style: Language quality and personality match  
+- Style: Language quality and personality match
 - Relevance: How well it addresses the prompt
 - Engagement: How compelling and memorable
 
@@ -164,7 +165,7 @@ Respond with ONLY this JSON format:
 {
   "scores": {
     "creativity": {"A": 8, "B": 7},
-    "style": {"A": 9, "B": 8}, 
+    "style": {"A": 9, "B": 8},
     "relevance": {"A": 10, "B": 9},
     "engagement": {"A": 8, "B": 7}
   },
@@ -176,7 +177,6 @@ Respond with ONLY this JSON format:
     const response = await result.response;
     const text = response.text().trim();
 
-    // Try to extract JSON from response
     let jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error('No JSON found in superagent response:', text);
@@ -186,14 +186,10 @@ Respond with ONLY this JSON format:
     try {
       const judgment = JSON.parse(jsonMatch[0]);
 
-      // Calculate totals
       const totalA = Object.values(judgment.scores).reduce((sum: number, category: any) => sum + category.A, 0);
       const totalB = Object.values(judgment.scores).reduce((sum: number, category: any) => sum + category.B, 0);
 
-      // Add total scores
       judgment.scores.total = { A: totalA, B: totalB };
-
-      // Mark as superagent judged
       judgment.superagent = true;
 
       return judgment;
@@ -203,16 +199,14 @@ Respond with ONLY this JSON format:
     }
   } catch (error: any) {
     console.error('Superagent judge error:', error);
-
-    // Handle quota errors for superagent
     if (error?.status === 429) {
       console.log('⚠️ Superagent quota exceeded, using fallback judge');
     }
-
     return judgeFallback(aText, bText);
   }
-} function judgeFallback(aText: string, bText: string) {
-  // Simple judge: score by length variety and characters diversity
+}
+
+function judgeFallback(aText: string, bText: string) {
   const diversity = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9]/g, "").split("")).size;
   const creativityA = Math.min(10, Math.round(diversity(aText) / 5));
   const creativityB = Math.min(10, Math.round(diversity(bText) / 5));
@@ -235,55 +229,67 @@ Respond with ONLY this JSON format:
   };
 }
 
+async function publish(origin: string, channel: string, data: any) {
+  try {
+    await fetch(`${origin}/api/realtime`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ channel, data }),
+      cache: "no-store",
+    });
+  } catch (e) {
+    console.error("realtime publish failed", e);
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const parsed = orchestrateSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
-    }
-    const { mode, agentAId, agentBId, prompt } = parsed.data;
+    const { agentAId, agentBId, prompt, mode = "duel" } = body || {};
 
-    // Ensure agents exist
-    const existingAgents = await db.select().from(agents).where(inArray(agents.id, [agentAId, agentBId]));
-    if (existingAgents.length !== 2) {
-      return NextResponse.json({ ok: false, error: "One or more agents not found" }, { status: 404 });
+    if (!agentAId || !agentBId || !prompt) {
+      return NextResponse.json({ ok: false, error: "agentAId, agentBId, prompt are required" }, { status: 400 });
     }
-    const agentA = existingAgents.find(a => a.id === agentAId)!;
-    const agentB = existingAgents.find(a => a.id === agentBId)!;
+    if (agentAId === agentBId) {
+      return NextResponse.json({ ok: false, error: "Pick two different agents" }, { status: 400 });
+    }
 
-    // Create match (start immediately)
-    const [match] = await db.insert(matches).values({
+    const [a] = await db.select().from(agents).where(eq(agents.id, agentAId));
+    const [b] = await db.select().from(agents).where(eq(agents.id, agentBId));
+    if (!a || !b) return NextResponse.json({ ok: false, error: "Agents not found" }, { status: 404 });
+
+    const now = Date.now();
+    const [m] = await db.insert(matches).values({
       mode,
       status: "in_progress",
-      startedAt: Date.now(),
-      endedAt: null,
-      vrfProof: null,
-      intentsTx: null,
-      shadeAgentId: null,
-      createdAt: Date.now(),
+      startedAt: now,
+      createdAt: now,
     }).returning();
 
-    // Seat players
     await db.insert(matchPlayers).values([
-      { matchId: match.id, agentId: agentAId, userId: agentA.ownerUserId, seat: 0, createdAt: Date.now() },
-      { matchId: match.id, agentId: agentBId, userId: agentB.ownerUserId, seat: 1, createdAt: Date.now() },
+      { matchId: m.id, agentId: agentAId, userId: a.ownerUserId, seat: 0, createdAt: now },
+      { matchId: m.id, agentId: agentBId, userId: b.ownerUserId, seat: 1, createdAt: now },
     ]);
 
-    // Ask Gemini API for answers
-    const os = await callGeminiAPI(prompt, agentA.promptProfile, agentB.promptProfile, agentA.name, agentB.name);
+    const origin = req.nextUrl.origin;
 
-    // Judge the responses using superagent
-    const verdict = await superagentJudge(os.answers.a, os.answers.b, agentA.name, agentB.name, prompt, agentA.promptProfile, agentB.promptProfile);
+    await publish(origin, "ticker", { type: "match_started", matchId: m.id, a: { id: a.id, name: a.name }, b: { id: b.id, name: b.name }, mode });
+    await publish(origin, `match:${m.id}`, { type: "started", matchId: m.id, mode, prompt });
 
-    // Build transcript
+    await publish(origin, `match:${m.id}`, { type: "generating", matchId: m.id });
+
+    const os = await callGeminiAPI(prompt, a.promptProfile, b.promptProfile, a.name, b.name);
+    const verdict = await superagentJudge(os.answers.a, os.answers.b, a.name, b.name, prompt, a.promptProfile, b.promptProfile);
+
+    await publish(origin, `match:${m.id}`, { type: "answers", matchId: m.id, answers: { A: os.answers.a, B: os.answers.b } });
+
     const transcript = {
-      matchId: match.id,
+      matchId: m.id,
       mode,
       prompt,
       agents: {
-        A: { id: agentAId, name: agentA.name },
-        B: { id: agentBId, name: agentB.name },
+        A: { id: agentAId, name: a.name },
+        B: { id: agentBId, name: b.name },
       },
       engine: os.engine,
       round: 0,
@@ -292,42 +298,53 @@ export async function POST(req: NextRequest) {
       timestamps: { createdAt: Date.now() },
     };
 
-    // Upload to storage
     const storageResult = await uploadToStorage(
-      `match-${match.id}-round-0.json`,
+      `match-${m.id}-round-0.json`,
       transcript,
-      match.id.toString()
+      m.id.toString()
     );
 
-    // Persist round
-    const [round] = await db.insert(rounds).values({
-      matchId: match.id,
+    const [r] = await db.insert(rounds).values({
+      matchId: m.id,
       idx: 0,
       question: prompt,
       ipfsCid: storageResult?.hash || null,
       judgeScores: verdict.scores as any,
-      resultSummary: `${verdict.winner === "A" ? agentA.name : agentB.name} wins — ${verdict.summary}`,
-      createdAt: Date.now(),
+      resultSummary: `${verdict.winner === "A" ? a.name : b.name} wins — ${verdict.summary}`,
+      answerA: os.answers.a,
+      answerB: os.answers.b,
+      createdAt: now,
     }).returning();
 
-    // Complete match
-    await db.update(matches).set({ status: "completed", endedAt: Date.now() }).where(eq(matches.id, match.id));
+    await publish(origin, `match:${m.id}`, { type: "scored", matchId: m.id, scores: verdict.scores, winner: verdict.winner });
+
+    await db.update(matches).set({ status: "completed", endedAt: Date.now() }).where(eq(matches.id, m.id));
+
+    await publish(origin, `match:${m.id}`, { type: "completed", matchId: m.id, roundId: r.id });
+    await publish(origin, "ticker", { type: "match_result", matchId: m.id, a: { id: a.id, name: a.name }, b: { id: b.id, name: b.name }, winner: verdict.winner, scores: verdict.scores.total });
+
+    await createMatchOnGolem({
+      id: m.id.toString(),
+      mode,
+      winner: verdict.winner,
+      scores: { scoreA: verdict.scores.total.A, scoreB: verdict.scores.total.B },
+      createdAt: now,
+    });
 
     return NextResponse.json({
       ok: true,
       data: {
-        matchId: match.id,
-        round,
+        matchId: m.id,
+        round: r,
         storageHash: storageResult?.hash,
         storageType: storageResult?.type,
-        // Legacy compatibility
         cid: storageResult?.hash,
         winner: verdict.winner,
         transcript: {
           answers: { A: os.answers.a, B: os.answers.b },
           agents: {
-            A: { id: agentAId, name: agentA.name },
-            B: { id: agentBId, name: agentB.name },
+            A: { id: agentAId, name: a.name },
+            B: { id: agentBId, name: b.name },
           },
           prompt,
           scores: verdict.scores
@@ -335,7 +352,7 @@ export async function POST(req: NextRequest) {
       }
     }, { status: 201 });
   } catch (e) {
-    console.error("POST /api/match/orchestrate error:", e);
+    console.error("/api/match/orchestrate POST error:", e);
     return NextResponse.json({ ok: false, error: "Internal server error" }, { status: 500 });
   }
 }

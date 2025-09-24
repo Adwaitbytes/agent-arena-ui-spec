@@ -5,7 +5,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 
 const createMatchSchema = z.object({
-  mode: z.enum(['boxing', 'cricket', 'carrom']),
+  mode: z.enum(['roast', 'writing', 'duel']),
   agentIds: z.array(z.number()).min(1).max(8),
 });
 

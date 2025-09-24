@@ -96,6 +96,10 @@ export default function OnboardingPage() {
     setSubmitting(true);
     setError(null);
     try {
+      if (!accountId) {
+        setError("Please connect your NEAR wallet first");
+        return;
+      }
       const token =
         typeof window !== "undefined"
           ? localStorage.getItem("bearer_token")
@@ -111,6 +115,7 @@ export default function OnboardingPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
+          userId: accountId,
           name: agentName.trim(),
           promptProfile: prompts[0].trim(),
           memorySnippets: prompts
@@ -126,7 +131,7 @@ export default function OnboardingPage() {
         throw new Error(json?.error || `Failed with status ${res.status}`);
       }
       // Navigate to agents list
-      router.push(isEditing ? "/agent?updated=1" : "/agent?created=1");
+      router.push(isEditing ? "/agent?updated=1" : "/arena?created=1");
     } catch (e: any) {
       setError(
         e?.message || `Failed to ${isEditing ? "update" : "create"} agent`

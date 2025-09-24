@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
+import { Metadata } from "next";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { WinBurst } from "./WinBurst";
+import { ShareBar } from "./ShareBar";
 
 async function getMatch(id: string) {
   const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/match/${id}`, { cache: "no-store" });
@@ -15,6 +18,67 @@ async function getMatch(id: string) {
   };
 }
 
+export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+  const data = await getMatch(params.id);
+  if (!data) {
+    return {
+      title: 'Match Not Found | Agent Battle Arena',
+    };
+  }
+  const { match, players, rounds } = data;
+
+  const a = players.find(p => p.seat === 1)?.agent;
+  const b = players.find(p => p.seat === 2)?.agent;
+
+  // Compute overall winner label from round winners (fallbacks handled)
+  const overallWinnerRaw = (() => {
+    const names = rounds.map(r => (r.winner || '').trim()).filter(Boolean);
+    if (names.length === 0) return '';
+    const counts = new Map<string, number>();
+    for (const n of names) counts.set(n, (counts.get(n) || 0) + 1);
+    return Array.from(counts.entries()).sort((x, y) => y[1] - x[1])[0][0];
+  })();
+  const overallWinner = (() => {
+    const w = overallWinnerRaw.toLowerCase();
+    if (!w) return '';
+    const aName = (a?.name || '').toLowerCase();
+    const bName = (b?.name || '').toLowerCase();
+    if (w === aName) return a?.name || '';
+    if (w === bName) return b?.name || '';
+    if (w === 'a' || w === '1' || w === 'seat 1') return a?.name || 'Seat 1';
+    if (w === 'b' || w === '2' || w === 'seat 2') return b?.name || 'Seat 2';
+    return overallWinnerRaw; // already a human-readable label
+  })();
+
+  const mode = match.mode || 'Duel';
+  const title = overallWinner 
+    ? `Agent Battle Replay: ${overallWinner} Wins Match #${match.id} in ${mode}`
+    : `Agent Battle Replay: Match #${match.id} in ${mode}`;
+  
+  const description = overallWinner 
+    ? `Relive the epic ${mode} battle where ${overallWinner} defeated ${b?.name || a?.name || 'AI Agent'}! See all rounds, outputs, and judge notes.`
+    : `Relive Match #${match.id} in ${mode} mode between ${a?.name || 'AI Agent'} and ${b?.name || 'AI Agent'}. Full replay with rounds and outputs.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: 'website',
+      url: `${process.env.NEXT_PUBLIC_BASE_URL || ''}/match/${match.id}`,
+      images: [
+        {
+          url: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1200&auto=format&fit=crop', // Vibrant writing arena image as OG fallback (matches design system)
+          width: 1200,
+          height: 630,
+          alt: `${overallWinner || 'Epic'} AI Agent Battle Replay`,
+        },
+      ],
+    },
+  };
+}
+
 export default async function MatchReplayPage({ params }: { params: { id: string } }) {
   const data = await getMatch(params.id);
   if (!data) notFound();
@@ -23,11 +87,51 @@ export default async function MatchReplayPage({ params }: { params: { id: string
   const a = players.find(p => p.seat === 1)?.agent;
   const b = players.find(p => p.seat === 2)?.agent;
 
+  // Compute overall winner label from round winners (fallbacks handled)
+  const overallWinnerRaw = (() => {
+    const names = rounds.map(r => (r.winner || '').trim()).filter(Boolean);
+    if (names.length === 0) return '';
+    const counts = new Map<string, number>();
+    for (const n of names) counts.set(n, (counts.get(n) || 0) + 1);
+    return Array.from(counts.entries()).sort((x, y) => y[1] - x[1])[0][0];
+  })();
+  const overallWinner = (() => {
+    const w = overallWinnerRaw.toLowerCase();
+    if (!w) return '';
+    const aName = (a?.name || '').toLowerCase();
+    const bName = (b?.name || '').toLowerCase();
+    if (w === aName) return a?.name || '';
+    if (w === bName) return b?.name || '';
+    if (w === 'a' || w === '1' || w === 'seat 1') return a?.name || 'Seat 1';
+    if (w === 'b' || w === '2' || w === 'seat 2') return b?.name || 'Seat 2';
+    return overallWinnerRaw; // already a human-readable label
+  })();
+
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Match #{match.id} Replay</h1>
-        <Button asChild variant="secondary"><Link href={`/arena`}>Back to Arenas</Link></Button>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight flex items-center gap-3">
+          Match #{match.id} Replay
+          {overallWinner && (
+            <span className="hidden sm:inline">
+              <WinBurst winner={overallWinner} />
+            </span>
+          )}
+        </h1>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="secondary"><Link href={`/arena`}>Back to Arenas</Link></Button>
+          <Button asChild variant="outline">
+            <Link href={`/arena?mode=${encodeURIComponent(match.mode || 'duel')}&rematch=true`}>Play Again in ${match.mode || 'Duel'}</Link>
+          </Button>
+        </div>
+      </div>
+
+      {/* Share bar (mobile-friendly) */}
+      <div className="mt-4 flex items-center justify-between gap-3">
+        {overallWinner && (
+          <span className="sm:hidden"><WinBurst winner={overallWinner} /></span>
+        )}
+        <ShareBar path={`/match/${match.id}`} text={`My AI just battled in Agent Battle Arena — Match #${match.id} ${overallWinner ? `| Winner: ${overallWinner}` : ''} ⚔️`}/>
       </div>
 
       <Card className="mt-6">

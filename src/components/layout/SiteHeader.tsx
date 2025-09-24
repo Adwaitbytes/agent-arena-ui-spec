@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { Menu, X, Swords, Sparkles, Trophy, Bot, Users } from "lucide-react";
@@ -8,15 +8,40 @@ import ConnectWalletButton from "@/components/near/ConnectWalletButton";
 
 export const SiteHeader = () => {
   const [open, setOpen] = useState(false);
+  // usage meter state
+  const [usage, setUsage] = useState<{ dailyUsed: number; dailyLimit: number } | null>(null);
 
   const nav = [
     { href: "/agent/browse", label: "Browse Agents" },
     { href: "/onboarding", label: "Create Agent" },
     { href: "/match", label: "Quick Match" },
-    { href: "/multiplayer", label: "Multiplayer" },
     { href: "/leaderboard", label: "Leaderboard" },
     { href: "/agent", label: "My Agents" },
+    { href: "/multiplayer", label: "Multiplayer" },
   ];
+
+  useEffect(() => {
+    let alive = true;
+    const fetchUsage = async () => {
+      try {
+        const token = typeof window !== "undefined" ? localStorage.getItem("bearer_token") : null;
+        const res = await fetch("/api/usage", {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        const json = await res.json();
+        if (!alive) return;
+        const d = json?.data;
+        if (d && typeof d.dailyUsed === "number" && typeof d.dailyLimit === "number") {
+          setUsage({ dailyUsed: d.dailyUsed, dailyLimit: d.dailyLimit });
+        }
+      } catch (_) {
+        // no-op
+      }
+    };
+    fetchUsage();
+    const id = setInterval(fetchUsage, 20_000);
+    return () => { alive = false; clearInterval(id); };
+  }, []);
 
   return (
     <header className="sticky top-0 z-50">
@@ -57,7 +82,22 @@ export const SiteHeader = () => {
             ))}
           </nav>
 
-          <div className="hidden sm:flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-3">
+            {/* Usage meter */}
+            <div className="hidden md:flex items-center gap-2">
+              <div className="w-32 h-2 rounded bg-accent/60 overflow-hidden">
+                <div
+                  className="h-full bg-chart-4 transition-[width] duration-500"
+                  style={{ width: `${Math.min(100, Math.round(((usage?.dailyUsed ?? 0) / Math.max(1, usage?.dailyLimit ?? 10)) * 100))}%` }}
+                />
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {(usage?.dailyUsed ?? 0)} / {(usage?.dailyLimit ?? 10)}
+              </span>
+            </div>
+            <Button size="sm" variant="secondary" asChild>
+              <Link href="/pricing">Upgrade</Link>
+            </Button>
             <ConnectWalletButton size="sm" />
           </div>
 
@@ -101,7 +141,17 @@ export const SiteHeader = () => {
                 <span>{n.label}</span>
               </Link>
             ))}
-            <div className="flex pt-2">
+            <div className="flex pt-2 gap-2 items-center">
+              {/* Compact usage meter on mobile */}
+              <div className="flex-1 h-2 rounded bg-accent/60 overflow-hidden">
+                <div
+                  className="h-full bg-chart-4"
+                  style={{ width: `${Math.min(100, Math.round(((usage?.dailyUsed ?? 0) / Math.max(1, usage?.dailyLimit ?? 10)) * 100))}%` }}
+                />
+              </div>
+              <Button size="sm" variant="secondary" asChild>
+                <Link href="/pricing">Upgrade</Link>
+              </Button>
               <ConnectWalletButton size="default" />
             </div>
           </div>
