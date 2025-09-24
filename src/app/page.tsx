@@ -62,7 +62,7 @@ export default function HomePage() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: "easeOut" }} className="!w-full !h-full">
+              transition={{ duration: 0.8, ease: "easeOut" }} className="!w-[987px] !h-full">
 
               {/* Simplified badge - no arrow for cleanliness */}
               <div className="inline-flex items-center gap-2 rounded-full border border-border/30 bg-background/90 px-4 py-2 text-xs font-medium backdrop-blur-md shadow-lg mb-8">
