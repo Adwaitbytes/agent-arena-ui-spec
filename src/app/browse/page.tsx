@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Loader2, Bot } from "lucide-react";
-import { useNearAccount } from '@/lib/near'; // Fixed import
+import { useNearWallet } from '@/lib/near'; // Fixed import
 import { AnimatePresence } from "framer-motion";
 
 interface Agent {
@@ -22,7 +22,7 @@ export default function BrowsePage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const { accountId } = useNearAccount();
+  const { accountId } = useNearWallet();
   const [searchActive, setSearchActive] = useState(false);
 
   useEffect(() => {
