@@ -4,8 +4,6 @@ import { agents, matches, matchPlayers, rounds } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { golemClient, createMatchOnGolem } from "@/lib/golem-client";
 
-export const runtime = "nodejs";
-
 // Helper: safe dynamic Gemini
 async function generateWithGemini(prompt: string) {
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_GENAI_API_KEY || process.env.GOOGLE_API_KEY;
