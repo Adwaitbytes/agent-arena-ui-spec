@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { useNearAccount } from "@/lib/near";
+import { useNearWallet } from "@/lib/near";
 import { ArrowRight, Crown, Sparkles, Bot, Zap, Flame, Book, Shield, Trophy } from "lucide-react";
 
 const arenas = [
@@ -51,7 +51,7 @@ export default function MatchPage() {
   const [selectedArena, setSelectedArena] = useState("");
   const [myAgentId, setMyAgentId] = useState("");
   const [opponentAgentId, setOpponentAgentId] = useState("");
-  const { accountId } = useNearAccount();
+  const { accountId } = useNearWallet();
 
   const handleStartMatch = () => {
     if (!selectedArena || (!myAgentId && !opponentAgentId)) return;
